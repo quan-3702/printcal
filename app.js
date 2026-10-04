@@ -8,7 +8,7 @@ const FREE_EVENTS = 12;
 const STORE_BILLING = 'https://store.microsoft.com/billing';
 const PRO_SKU = 'printcal_pro';
 const PRO_IDS = [PRO_SKU];
-let STORE_URL = 'https://apps.microsoft.com/search?query=PrintCal';
+let STORE_URL = 'https://apps.microsoft.com/detail/9MWSF3JMP1GJ';
 let proAvailable = false; // Pro limits apply only when the Store actually sells the add-on
 let proSku = PRO_SKU;
 let isPro = false;
