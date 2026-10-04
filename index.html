@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PrintCal – Photo Calendar Maker</title>
+  <meta name="description" content="Make and print your own calendar with family photos, birthdays and events. Simple, private and offline.">
+  <meta name="theme-color" content="#9f1239">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+  <style id="pageRule"></style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="icon-192.png" alt="" width="30" height="30"><span>PrintCal</span></div>
+    <span class="tree-title" id="headline"></span>
+    <div class="top-btns">
+      <button id="printAll" class="tb">🖨 Print all 12 months</button>
+      <button id="printOne" class="tb">Print this month</button>
+      <button id="imgBtn" class="tb">🖼 Save picture</button>
+      <button id="moreBtn" class="tb">☰ More</button>
+      <button id="proBtn" class="pro-btn" hidden>★ Get Pro</button>
+    </div>
+    <div id="menu" class="menu" hidden>
+      <button id="yearBtn">Print the whole year on one page <span class="badge pro-only">PRO</span></button>
+      <button id="kinBtn">Add birthdays from a Kinleaf family tree backup…</button>
+      <button id="backupBtn">Save a backup file</button>
+      <button id="restoreFileBtn">Open a backup file…</button>
+      <button id="sampleBtn">Load the sample calendar</button>
+      <button id="clearBtn" class="danger">Start a new empty calendar…</button>
+      <a href="mailto:thequan03072002@gmail.com?subject=PrintCal%20feedback">✉ Feedback &amp; support</a>
+      <a href="https://apps.microsoft.com/detail/9NRR32J91340" target="_blank" rel="noopener">More apps: Kinleaf family tree maker</a>
+      <a href="https://apps.microsoft.com/detail/9NPWMMZ1NPPV" target="_blank" rel="noopener">More apps: PDF Toolbox</a>
+    </div>
+    <input id="fileIn" type="file" hidden>
+  </header>
+
+  <main class="layout">
+    <aside class="left">
+      <h2>Calendar</h2>
+      <div class="two">
+        <label class="field">Year<input id="year" type="text" inputmode="numeric" maxlength="4"></label>
+        <label class="field">Paper<select id="paper"><option value="letter">Letter (US)</option><option value="a4">A4</option></select></label>
+      </div>
+      <label class="field">Page style
+        <select id="layout"><option value="photo">Photo on top, month below</option><option value="grid">Big month grid, no photo</option></select></label>
+      <div class="two">
+        <label class="field">Week starts on<select id="weekStart"><option value="0">Sunday</option><option value="1">Monday</option></select></label>
+        <label class="field">Language<select id="locale">
+          <option value="en-US">English</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="it">Italiano</option><option value="pt">Português</option><option value="nl">Nederlands</option><option value="pl">Polski</option><option value="vi">Tiếng Việt</option>
+        </select></label>
+      </div>
+      <div class="two">
+        <label class="field">Lettering<select id="font"><option value="sans">Modern</option><option value="serif">Classic</option></select></label>
+        <div class="field">Color<div id="swatches" class="swatches"></div></div>
+      </div>
+      <label class="check"><input id="usHolidays" type="checkbox"> Show US holidays</label>
+
+      <h2 id="photoHead">Photo</h2>
+      <div class="row-btns" style="margin-top:0">
+        <button id="photoBtn" class="primary">Add a photo</button>
+        <button id="photoDel" class="ghost" hidden>Remove</button>
+      </div>
+      <p id="photoHint" class="hint"></p>
+
+      <h2>Birthdays &amp; events</h2>
+      <div class="three">
+        <select id="evMonth" aria-label="Month"></select>
+        <input id="evDay" type="text" inputmode="numeric" maxlength="2" placeholder="Day" aria-label="Day">
+        <select id="evType" aria-label="Type"><option value="b">🎂 Birthday</option><option value="a">♥ Anniversary</option><option value="o">• Other</option></select>
+      </div>
+      <div class="addrow">
+        <input id="evText" type="text" maxlength="40" placeholder="Name or event, e.g. Grandma Rose">
+        <button id="evAdd" class="primary">Add</button>
+      </div>
+      <ul id="events" class="events"></ul>
+      <p id="countLine" class="hint"></p>
+    </aside>
+
+    <section class="stage">
+      <div id="months" class="months"></div>
+      <div class="preview">
+        <button id="prev" class="nav" title="Previous month">‹</button>
+        <div id="page" style="height:100%;display:flex;align-items:center;justify-content:center;min-width:0;flex:1"></div>
+        <button id="next" class="nav" title="Next month">›</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="proDialog" class="dlg">
+    <h2>PrintCal Pro</h2>
+    <p class="muted">One-time purchase. Yours forever on this Microsoft account.</p>
+    <ul class="pro-list">
+      <li><strong>A photo for every month</strong> <span class="muted">(Free: 3 photos)</span></li>
+      <li><strong>Unlimited birthdays and events</strong> <span class="muted">(Free: 12)</span></li>
+      <li><strong>Whole year on one page</strong> – a wall planner to print</li>
+    </ul>
+    <p id="proMsg" class="pro-msg" hidden></p>
+    <div class="row-btns">
+      <button id="buyBtn" class="primary">Unlock Pro</button>
+      <button id="restoreBtn" class="ghost">Restore purchase</button>
+      <button id="closePro" class="ghost">Not now</button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <div id="printArea"></div>
+  <script src="app.js"></script>
+</body>
+</html>
