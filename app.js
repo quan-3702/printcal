@@ -8,7 +8,7 @@ const FREE_EVENTS = 12;
 const STORE_BILLING = 'https://store.microsoft.com/billing';
 const PRO_SKU = 'printcal_pro';
 const PRO_IDS = [PRO_SKU];
-let STORE_URL = 'https://apps.microsoft.com/detail/9MWSF3JMP1GJ';
+let STORE_URL = 'https://apps.microsoft.com/search?query=PrintCal';
 let proAvailable = false; // Pro limits apply only when the Store actually sells the add-on
 let proSku = PRO_SKU;
 let isPro = false;
@@ -85,7 +85,14 @@ function needsPro(reason) {
 // ---------- data ----------
 const COLORS = ['#9f1239', '#1d4ed8', '#166534', '#b45309', '#6d28d9', '#0f766e', '#374151'];
 const defaultYear = () => { const d = new Date(); return d.getFullYear() + (d.getMonth() >= 8 ? 1 : 0); };
-const blank = () => ({ year: defaultYear(), paper: 'letter', layout: 'photo', weekStart: 0, locale: 'en-US', font: 'sans', color: COLORS[0], usHolidays: true, events: [], photos: {} });
+const blank = () => ({ year: defaultYear(), start: 0, paper: 'letter', layout: 'photo', weekStart: 0, locale: 'en-US', font: 'sans', color: COLORS[0], holidays: 'US', lunar: false, events: [], photos: {}, photoPos: {} });
+function upgrade(c) { // older saved calendars
+  const o = Object.assign(blank(), c);
+  if (c && c.holidays == null) o.holidays = c.usHolidays === false ? 'none' : 'US';
+  if (!o.photoPos) o.photoPos = {};
+  delete o.usHolidays;
+  return o;
+}
 let cal = blank();
 let cur = 0; // month shown
 const photoCount = () => Object.keys(cal.photos).filter((k) => cal.photos[k]).length;
@@ -112,27 +119,158 @@ function nth(y, m, wd, n) { // n-th weekday of a month; n = -1 for the last one
   if (n > 0) { const first = new Date(y, m, 1).getDay(); return 1 + ((wd - first + 7) % 7) + (n - 1) * 7; }
   const last = daysIn(y, m); return last - ((new Date(y, m, last).getDay() - wd + 7) % 7);
 }
-function usHolidays(y) {
+// ---------- lunar calendar (Vietnamese / Chinese), after Ho Ngoc Duc's public algorithm ----------
+const INT = Math.floor;
+function jdFromDate(dd, mm, yy) {
+  const a = INT((14 - mm) / 12), y = yy + 4800 - a, m = mm + 12 * a - 3;
+  let jd = dd + INT((153 * m + 2) / 5) + 365 * y + INT(y / 4) - INT(y / 100) + INT(y / 400) - 32045;
+  if (jd < 2299161) jd = dd + INT((153 * m + 2) / 5) + 365 * y + INT(y / 4) - 32083;
+  return jd;
+}
+function newMoon(k) {
+  const T = k / 1236.85, T2 = T * T, T3 = T2 * T, dr = Math.PI / 180;
+  let Jd1 = 2415020.75933 + 29.53058868 * k + 0.0001178 * T2 - 0.000000155 * T3;
+  Jd1 += 0.00033 * Math.sin((166.56 + 132.87 * T - 0.009173 * T2) * dr);
+  const M = 359.2242 + 29.10535608 * k - 0.0000333 * T2 - 0.00000347 * T3;
+  const Mpr = 306.0253 + 385.81691806 * k + 0.0107306 * T2 + 0.00001236 * T3;
+  const F = 21.2964 + 390.67050646 * k - 0.0016528 * T2 - 0.00000239 * T3;
+  let C1 = (0.1734 - 0.000393 * T) * Math.sin(M * dr) + 0.0021 * Math.sin(2 * dr * M);
+  C1 = C1 - 0.4068 * Math.sin(Mpr * dr) + 0.0161 * Math.sin(dr * 2 * Mpr);
+  C1 = C1 - 0.0004 * Math.sin(dr * 3 * Mpr);
+  C1 = C1 + 0.0104 * Math.sin(dr * 2 * F) - 0.0051 * Math.sin(dr * (M + Mpr));
+  C1 = C1 - 0.0074 * Math.sin(dr * (M - Mpr)) + 0.0004 * Math.sin(dr * (2 * F + M));
+  C1 = C1 - 0.0004 * Math.sin(dr * (2 * F - M)) - 0.0006 * Math.sin(dr * (2 * F + Mpr));
+  C1 = C1 + 0.0010 * Math.sin(dr * (2 * F - Mpr)) + 0.0005 * Math.sin(dr * (2 * Mpr + M));
+  const deltat = T < -11 ? 0.001 + 0.000839 * T + 0.0002261 * T2 - 0.00000845 * T3 - 0.000000081 * T * T3 : -0.000278 + 0.000265 * T + 0.000262 * T2;
+  return Jd1 + C1 - deltat;
+}
+function sunLongitude(jdn) {
+  const T = (jdn - 2451545.0) / 36525, T2 = T * T, dr = Math.PI / 180;
+  const M = 357.52910 + 35999.05030 * T - 0.0001559 * T2 - 0.00000048 * T * T2;
+  const L0 = 280.46645 + 36000.76983 * T + 0.0003032 * T2;
+  let DL = (1.914600 - 0.004817 * T - 0.000014 * T2) * Math.sin(dr * M);
+  DL += (0.019993 - 0.000101 * T) * Math.sin(dr * 2 * M) + 0.000290 * Math.sin(dr * 3 * M);
+  let L = (L0 + DL) * dr;
+  return L - Math.PI * 2 * INT(L / (Math.PI * 2));
+}
+const sunLong = (dayNumber, tz) => INT(sunLongitude(dayNumber - 0.5 - tz / 24) / Math.PI * 6);
+const newMoonDay = (k, tz) => INT(newMoon(k) + 0.5 + tz / 24);
+function lunarMonth11(yy, tz) {
+  const off = jdFromDate(31, 12, yy) - 2415021, k = INT(off / 29.530588853);
+  let nm = newMoonDay(k, tz);
+  if (sunLong(nm, tz) >= 9) nm = newMoonDay(k - 1, tz);
+  return nm;
+}
+function leapMonthOffset(a11, tz) {
+  const k = INT((a11 - 2415021.076998695) / 29.530588853 + 0.5);
+  let last, i = 1, arc = sunLong(newMoonDay(k + i, tz), tz);
+  do { last = arc; i++; arc = sunLong(newMoonDay(k + i, tz), tz); } while (arc !== last && i < 14);
+  return i - 1;
+}
+const lunarCache = new Map();
+// Solar date (month 1-12) -> [lunar day, lunar month, lunar year, leap 0/1]
+function toLunar(dd, mm, yy, tz) {
+  const key = `${yy}-${mm}-${dd}-${tz}`;
+  if (lunarCache.has(key)) return lunarCache.get(key);
+  const dayNumber = jdFromDate(dd, mm, yy), k = INT((dayNumber - 2415021.076998695) / 29.530588853);
+  let monthStart = newMoonDay(k + 1, tz);
+  if (monthStart > dayNumber) monthStart = newMoonDay(k, tz);
+  let a11 = lunarMonth11(yy, tz), b11 = a11, lunarYear;
+  if (a11 >= monthStart) { lunarYear = yy; a11 = lunarMonth11(yy - 1, tz); } else { lunarYear = yy + 1; b11 = lunarMonth11(yy + 1, tz); }
+  const lunarDay = dayNumber - monthStart + 1, diff = INT((monthStart - a11) / 29);
+  let leap = 0, lunarMonth = diff + 11;
+  if (b11 - a11 > 365) {
+    const lmd = leapMonthOffset(a11, tz);
+    if (diff >= lmd) { lunarMonth = diff + 10; if (diff === lmd) leap = 1; }
+  }
+  if (lunarMonth > 12) lunarMonth -= 12;
+  if (lunarMonth >= 11 && diff < 4) lunarYear -= 1;
+  const r = [lunarDay, lunarMonth, lunarYear, leap];
+  lunarCache.set(key, r);
+  return r;
+}
+
+// ---------- public holidays and special days ----------
+function easter(y) { // Gregorian computus -> [month 0-11, day]
+  const a = y % 19, b = INT(y / 100), c = y % 100, d = INT(b / 4), e = b % 4, f = INT((b + 8) / 25), g = INT((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = INT(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = INT((a + 11 * h + 22 * l) / 451);
+  const mon = INT((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+  return [mon - 1, day];
+}
+const HOLIDAY_SETS = [['none', 'No holidays'], ['US', 'United States'], ['GB', 'United Kingdom'], ['CA', 'Canada'], ['AU', 'Australia'], ['DE', 'Germany'], ['FR', 'France'], ['ES', 'Spain'], ['VN', 'Vietnam (with lunar holidays)']];
+const holCache = new Map();
+function holidays(country, y) {
+  const key = country + y;
+  if (holCache.has(key)) return holCache.get(key);
   const h = {};
-  const add = (m, d, t) => { h[`${m}-${d}`] = t; };
-  add(0, 1, "New Year's Day"); add(0, nth(y, 0, 1, 3), 'Martin Luther King Jr. Day'); add(1, 14, "Valentine's Day"); add(1, nth(y, 1, 1, 3), "Presidents' Day");
-  add(4, nth(y, 4, 0, 2), "Mother's Day"); add(4, nth(y, 4, 1, -1), 'Memorial Day'); add(5, nth(y, 5, 0, 3), "Father's Day"); add(5, 19, 'Juneteenth');
-  add(6, 4, 'Independence Day'); add(8, nth(y, 8, 1, 1), 'Labor Day'); add(9, nth(y, 9, 1, 2), 'Columbus Day'); add(9, 31, 'Halloween');
-  add(10, 11, 'Veterans Day'); add(10, nth(y, 10, 4, 4), 'Thanksgiving'); add(11, 25, 'Christmas Day');
+  const add = (m, d, t) => { const k = `${m}-${d}`; h[k] = h[k] ? h[k] + ' · ' + t : t; };
+  const [em, ed] = easter(y);
+  const fromEaster = (n, t) => { const dt = new Date(y, em, ed + n); add(dt.getMonth(), dt.getDate(), t); };
+  if (country === 'US') {
+    add(0, 1, "New Year's Day"); add(0, nth(y, 0, 1, 3), 'Martin Luther King Jr. Day'); add(1, 14, "Valentine's Day"); add(1, nth(y, 1, 1, 3), "Presidents' Day");
+    fromEaster(0, 'Easter'); add(4, nth(y, 4, 0, 2), "Mother's Day"); add(4, nth(y, 4, 1, -1), 'Memorial Day'); add(5, nth(y, 5, 0, 3), "Father's Day"); add(5, 19, 'Juneteenth');
+    add(6, 4, 'Independence Day'); add(8, nth(y, 8, 1, 1), 'Labor Day'); add(9, nth(y, 9, 1, 2), 'Columbus Day'); add(9, 31, 'Halloween');
+    add(10, 11, 'Veterans Day'); add(10, nth(y, 10, 4, 4), 'Thanksgiving'); add(11, 25, 'Christmas Day');
+  } else if (country === 'GB') {
+    add(0, 1, "New Year's Day"); add(1, 14, "Valentine's Day"); fromEaster(-21, "Mother's Day"); fromEaster(-2, 'Good Friday'); fromEaster(0, 'Easter Sunday'); fromEaster(1, 'Easter Monday');
+    add(4, nth(y, 4, 1, 1), 'Early May bank holiday'); add(4, nth(y, 4, 1, -1), 'Spring bank holiday'); add(5, nth(y, 5, 0, 3), "Father's Day"); add(7, nth(y, 7, 1, -1), 'Summer bank holiday');
+    add(9, 31, 'Halloween'); add(10, 5, 'Bonfire Night'); add(10, nth(y, 10, 0, 2), 'Remembrance Sunday'); add(11, 25, 'Christmas Day'); add(11, 26, 'Boxing Day');
+  } else if (country === 'CA') {
+    add(0, 1, "New Year's Day"); add(1, 14, "Valentine's Day"); add(1, nth(y, 1, 1, 3), 'Family Day'); fromEaster(-2, 'Good Friday'); fromEaster(0, 'Easter Sunday');
+    add(4, nth(y, 4, 0, 2), "Mother's Day"); { const d25 = new Date(y, 4, 24); add(4, 24 - ((d25.getDay() + 6) % 7), 'Victoria Day'); } add(5, nth(y, 5, 0, 3), "Father's Day");
+    add(6, 1, 'Canada Day'); add(7, nth(y, 7, 1, 1), 'Civic Holiday'); add(8, nth(y, 8, 1, 1), 'Labour Day'); add(8, 30, 'Truth and Reconciliation Day'); add(9, nth(y, 9, 1, 2), 'Thanksgiving');
+    add(9, 31, 'Halloween'); add(10, 11, 'Remembrance Day'); add(11, 25, 'Christmas Day'); add(11, 26, 'Boxing Day');
+  } else if (country === 'AU') {
+    add(0, 1, "New Year's Day"); add(0, 26, 'Australia Day'); add(1, 14, "Valentine's Day"); fromEaster(-2, 'Good Friday'); fromEaster(-1, 'Easter Saturday'); fromEaster(0, 'Easter Sunday'); fromEaster(1, 'Easter Monday');
+    add(3, 25, 'Anzac Day'); add(4, nth(y, 4, 0, 2), "Mother's Day"); add(5, nth(y, 5, 1, 2), "King's Birthday"); add(8, nth(y, 8, 0, 1), "Father's Day"); add(9, 31, 'Halloween');
+    add(11, 25, 'Christmas Day'); add(11, 26, 'Boxing Day');
+  } else if (country === 'DE') {
+    add(0, 1, 'Neujahr'); add(1, 14, 'Valentinstag'); fromEaster(-48, 'Rosenmontag'); fromEaster(-2, 'Karfreitag'); fromEaster(0, 'Ostersonntag'); fromEaster(1, 'Ostermontag');
+    add(4, 1, 'Tag der Arbeit'); add(4, nth(y, 4, 0, 2), 'Muttertag'); fromEaster(39, 'Christi Himmelfahrt'); fromEaster(49, 'Pfingstsonntag'); fromEaster(50, 'Pfingstmontag');
+    add(9, 3, 'Tag der Deutschen Einheit'); add(9, 31, 'Halloween'); add(11, 6, 'Nikolaus'); add(11, 24, 'Heiligabend'); add(11, 25, '1. Weihnachtstag'); add(11, 26, '2. Weihnachtstag'); add(11, 31, 'Silvester');
+  } else if (country === 'FR') {
+    add(0, 1, "Jour de l'An"); add(0, 6, 'Épiphanie'); add(1, 14, 'Saint-Valentin'); fromEaster(0, 'Pâques'); fromEaster(1, 'Lundi de Pâques'); add(4, 1, 'Fête du Travail'); add(4, 8, 'Victoire 1945');
+    fromEaster(39, 'Ascension'); fromEaster(49, 'Pentecôte'); fromEaster(50, 'Lundi de Pentecôte');
+    { let d = nth(y, 4, 0, -1); const p = new Date(y, em, ed + 49); if (p.getMonth() === 4 && p.getDate() === d) { const n = new Date(y, 4, d + 7); add(n.getMonth(), n.getDate(), 'Fête des mères'); } else add(4, d, 'Fête des mères'); }
+    add(5, nth(y, 5, 0, 3), 'Fête des pères'); add(6, 14, 'Fête nationale'); add(7, 15, 'Assomption'); add(10, 1, 'Toussaint'); add(10, 11, 'Armistice 1918'); add(11, 25, 'Noël');
+  } else if (country === 'ES') {
+    add(0, 1, 'Año Nuevo'); add(0, 6, 'Reyes Magos'); add(1, 14, 'San Valentín'); fromEaster(-3, 'Jueves Santo'); fromEaster(-2, 'Viernes Santo'); fromEaster(0, 'Pascua');
+    add(4, 1, 'Día del Trabajo'); add(4, nth(y, 4, 0, 1), 'Día de la Madre'); add(2, 19, 'Día del Padre'); add(7, 15, 'Asunción'); add(9, 12, 'Fiesta Nacional');
+    add(10, 1, 'Todos los Santos'); add(11, 6, 'Día de la Constitución'); add(11, 8, 'Inmaculada Concepción'); add(11, 24, 'Nochebuena'); add(11, 25, 'Navidad'); add(11, 31, 'Nochevieja');
+  } else if (country === 'VN') {
+    add(0, 1, 'Tết Dương lịch'); add(1, 14, 'Valentine'); add(2, 8, 'Quốc tế Phụ nữ'); add(3, 30, 'Giải phóng miền Nam'); add(4, 1, 'Quốc tế Lao động'); add(5, 1, 'Quốc tế Thiếu nhi');
+    add(8, 2, 'Quốc khánh'); add(9, 20, 'Phụ nữ Việt Nam'); add(10, 20, 'Nhà giáo Việt Nam'); add(11, 22, 'Quân đội Nhân dân'); add(11, 24, 'Giáng sinh');
+    const L = { '1-1': 'Mùng 1 Tết', '2-1': 'Mùng 2 Tết', '3-1': 'Mùng 3 Tết', '15-1': 'Rằm tháng Giêng', '10-3': 'Giỗ Tổ Hùng Vương', '15-4': 'Lễ Phật đản', '5-5': 'Tết Đoan Ngọ', '15-7': 'Lễ Vu Lan', '15-8': 'Tết Trung thu', '23-12': 'Ông Công Ông Táo' };
+    for (let m = 0; m < 12; m++) for (let d = 1; d <= daysIn(y, m); d++) {
+      const [ld, lm, , leap] = toLunar(d, m + 1, y, 7);
+      if (leap) continue;
+      const t = L[`${ld}-${lm}`];
+      if (t) add(m, d, t);
+      if (lm === 12) { const nx = new Date(y, m, d + 1), [nd] = toLunar(nx.getDate(), nx.getMonth() + 1, nx.getFullYear(), 7); if (nd === 1) add(m, d, 'Giao thừa'); }
+    }
+  }
+  holCache.set(key, h);
   return h;
 }
+
+// The 12 pages can start in any month (e.g. a school year from September).
+const slot = (i) => { const k = cal.start + i; return { y: cal.year + INT(k / 12), m: k % 12 }; };
+const slotOf = (m) => (m - cal.start + 12) % 12;
+const lunarTz = () => (cal.holidays === 'VN' || cal.locale === 'vi' ? 7 : 8);
+const spanTitle = () => (cal.start ? `${cal.year}–${cal.year + 1}` : String(cal.year));
 const ICON = { b: '🎂 ', a: '♥ ', o: '' };
 
 // ---------- drawing ----------
 const clip = (s, n) => (s.length > n ? s.slice(0, Math.max(1, n - 1)).trimEnd() + '…' : s);
+const PAPER = { letter: ['letter', [612, 792]], a4: ['A4', [595, 842]], a3: ['A3', [595, 842]], a5: ['A5', [595, 842]], tabloid: ['11in 17in', [612, 947]] };
 function pageSize(landscape) {
-  const [w, h] = cal.paper === 'a4' ? [595, 842] : [612, 792];
+  const [w, h] = (PAPER[cal.paper] || PAPER.letter)[1];
   return landscape ? [h, w] : [w, h];
 }
-function gridSvg(m, x, y, w, h) {
-  const Y = cal.year, ws = cal.weekStart, first = (new Date(Y, m, 1).getDay() - ws + 7) % 7, n = daysIn(Y, m);
+function gridSvg(Y, m, x, y, w, h) {
+  const ws = cal.weekStart, first = (new Date(Y, m, 1).getDay() - ws + 7) % 7, n = daysIn(Y, m);
   const rows = Math.ceil((first + n) / 7), headH = 20, cw = w / 7, ch = (h - headH) / rows;
-  const hol = cal.usHolidays ? usHolidays(Y) : {};
+  const hol = holidays(cal.holidays, Y), tz = lunarTz();
   let s = `<rect x="${x}" y="${y}" width="${w}" height="${headH}" fill="${cal.color}"/>`;
   for (let i = 0; i < 7; i++) s += `<text x="${x + cw * i + cw / 2}" y="${y + 14}" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">${esc(cap(weekdayName((i + ws) % 7)).toUpperCase())}</text>`;
   const maxLines = Math.max(1, Math.floor((ch - 20) / 9.5)), maxChars = Math.floor(cw / 4.1);
@@ -144,6 +282,11 @@ function gridSvg(m, x, y, w, h) {
     const wd = (c + ws) % 7, holiday = hol[`${m}-${d}`];
     const red = wd === 0 || holiday;
     s += `<text x="${cx + 5}" y="${cy + 15}" font-size="13" font-weight="700" fill="${red ? cal.color : '#111827'}">${d}</text>`;
+    if (cal.lunar) {
+      const [ld, lm, , leap] = toLunar(d, m + 1, Y, tz);
+      const first1 = ld === 1;
+      s += `<text x="${cx + cw - 4}" y="${cy + 12}" text-anchor="end" font-size="${first1 ? 7.4 : 7}" font-weight="${first1 ? 700 : 400}" fill="${first1 ? cal.color : '#6b7280'}">${first1 ? `${ld}/${lm}${leap ? '*' : ''}` : ld}</text>`;
+    }
     const lines = [];
     if (holiday) lines.push([holiday, cal.color]);
     cal.events.filter((e) => e.m === m && e.d === d).forEach((e) => lines.push([ICON[e.t] + e.text, '#111827']));
@@ -154,35 +297,43 @@ function gridSvg(m, x, y, w, h) {
   }
   return s + `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#6b7280" stroke-width="1"/>`;
 }
+function photoBox(m, x, y, w, h) {
+  const p = cal.photoPos[m] || {}, ar = p.ar || 1.5, z = p.z || 1;
+  let dw, dh;
+  if (ar > w / h) { dh = h; dw = h * ar; } else { dw = w; dh = w / ar; }
+  dw *= z; dh *= z;
+  const px = p.x == null ? 0.5 : p.x, py = p.y == null ? 0.5 : p.y;
+  return { x: x - (dw - w) * px, y: y - (dh - h) * py, w: dw, h: dh, fx: x, fy: y, fw: w, fh: h };
+}
 function landscapePic(m, x, y, w, h) { // placeholder shown (and printed) when a month has no photo
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${cal.color}"/><text x="${x + w / 2}" y="${y + h / 2 + 22}" text-anchor="middle" font-size="64" font-weight="700" fill="#fff" opacity=".92">${esc(cap(monthName(m)))}</text>`;
 }
 const fontFamily = () => (cal.font === 'serif' ? 'Georgia, Cambria, serif' : 'Segoe UI, system-ui, sans-serif');
-function monthSvg(m, forScreen) {
-  const land = cal.layout === 'grid', [W, H] = pageSize(land), M = 30;
+function monthSvg(i, forScreen) {
+  const { y: Y, m } = slot(i), land = cal.layout === 'grid', [W, H] = pageSize(land), M = 30;
   let body = `<rect width="${W}" height="${H}" fill="#fff"/>`;
   if (land) {
-    body += `<text x="${M}" y="${M + 34}" font-size="40" font-weight="700" fill="${cal.color}">${esc(cap(monthName(m)))}</text><text x="${W - M}" y="${M + 34}" text-anchor="end" font-size="40" font-weight="300" fill="#6b7280">${cal.year}</text>`;
-    body += gridSvg(m, M, M + 52, W - 2 * M, H - 2 * M - 52);
+    body += `<text x="${M}" y="${M + 34}" font-size="40" font-weight="700" fill="${cal.color}">${esc(cap(monthName(m)))}</text><text x="${W - M}" y="${M + 34}" text-anchor="end" font-size="40" font-weight="300" fill="#6b7280">${Y}</text>`;
+    body += gridSvg(Y, m, M, M + 52, W - 2 * M, H - 2 * M - 52);
   } else {
     const ph = Math.round(H * 0.44);
     const photo = cal.photos[m];
-    if (photo) body += `<clipPath id="pc${m}"><rect x="${M}" y="${M}" width="${W - 2 * M}" height="${ph}"/></clipPath><image href="${photo}" x="${M}" y="${M}" width="${W - 2 * M}" height="${ph}" preserveAspectRatio="xMidYMid slice" clip-path="url(#pc${m})"/>`;
+    if (photo) { const b = photoBox(m, M, M, W - 2 * M, ph); body += `<clipPath id="pc${m}"><rect x="${M}" y="${M}" width="${W - 2 * M}" height="${ph}"/></clipPath><image href="${photo}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="none" clip-path="url(#pc${m})"/>`; if (forScreen) body += `<rect id="photoHit" x="${M}" y="${M}" width="${W - 2 * M}" height="${ph}" fill="transparent" style="cursor:move"/>`; }
     else body += landscapePic(m, M, M, W - 2 * M, ph) + (forScreen ? `<text x="${W / 2}" y="${M + ph - 24}" text-anchor="middle" font-size="13" fill="#fff" opacity=".9">Add a photo for this month with the button on the left</text>` : '');
     const ty = M + ph + 40;
-    body += `<text x="${M}" y="${ty}" font-size="32" font-weight="700" fill="${cal.color}">${esc(cap(monthName(m)))}</text><text x="${W - M}" y="${ty}" text-anchor="end" font-size="32" font-weight="300" fill="#6b7280">${cal.year}</text>`;
-    body += gridSvg(m, M, ty + 14, W - 2 * M, H - M - ty - 14);
+    body += `<text x="${M}" y="${ty}" font-size="32" font-weight="700" fill="${cal.color}">${esc(cap(monthName(m)))}</text><text x="${W - M}" y="${ty}" text-anchor="end" font-size="32" font-weight="300" fill="#6b7280">${Y}</text>`;
+    body += gridSvg(Y, m, M, ty + 14, W - 2 * M, H - M - ty - 14);
   }
   return { w: W, h: H, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="${fontFamily()}">${body}</svg>` };
 }
 function yearSvg() {
-  const [W, H] = pageSize(false), M = 34, Y = cal.year, ws = cal.weekStart;
-  const hol = cal.usHolidays ? usHolidays(Y) : {};
-  let body = `<rect width="${W}" height="${H}" fill="#fff"/><text x="${W / 2}" y="${M + 40}" text-anchor="middle" font-size="46" font-weight="700" fill="${cal.color}">${Y}</text>`;
+  const [W, H] = pageSize(false), M = 34, ws = cal.weekStart;
+  let body = `<rect width="${W}" height="${H}" fill="#fff"/><text x="${W / 2}" y="${M + 40}" text-anchor="middle" font-size="46" font-weight="700" fill="${cal.color}">${spanTitle()}</text>`;
   const top = M + 62, bw = (W - 2 * M) / 3, bh = (H - top - M) / 4;
-  for (let m = 0; m < 12; m++) {
-    const x = M + (m % 3) * bw + 8, y = top + Math.floor(m / 3) * bh + 6, cw = (bw - 16) / 7;
-    body += `<text x="${x}" y="${y + 13}" font-size="14" font-weight="700" fill="${cal.color}">${esc(cap(monthName(m)))}</text>`;
+  for (let i = 0; i < 12; i++) {
+    const { y: Y, m } = slot(i), hol = holidays(cal.holidays, Y);
+    const x = M + (i % 3) * bw + 8, y = top + Math.floor(i / 3) * bh + 6, cw = (bw - 16) / 7;
+    body += `<text x="${x}" y="${y + 13}" font-size="14" font-weight="700" fill="${cal.color}">${esc(cap(monthName(m)))}${cal.start ? ` <tspan font-weight="400" fill="#6b7280" font-size="11">${Y}</tspan>` : ''}</text>`;
     for (let i = 0; i < 7; i++) body += `<text x="${x + cw * i + cw / 2}" y="${y + 30}" text-anchor="middle" font-size="7.5" fill="#6b7280">${esc(cap(weekdayName((i + ws) % 7)).slice(0, 2))}</text>`;
     const first = (new Date(Y, m, 1).getDay() - ws + 7) % 7;
     for (let d = 1; d <= daysIn(Y, m); d++) {
@@ -198,15 +349,16 @@ function yearSvg() {
 // ---------- UI ----------
 let toastTimer = 0;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 4000); }
-function renderPage() { $('page').innerHTML = monthSvg(cur, true).svg; }
+function renderPage() { $('page').innerHTML = monthSvg(cur, true).svg; ensureAR(slot(cur).m); }
 function renderMonths() {
   const el = $('months');
   el.textContent = '';
-  for (let m = 0; m < 12; m++) {
-    const b = document.createElement('button');
+  for (let i = 0; i < 12; i++) {
+    const { y, m } = slot(i), b = document.createElement('button');
     b.textContent = cap(monthName(m, 'short')).replace('.', '');
-    b.className = (m === cur ? 'on' : '') + (cal.photos[m] ? ' has' : '');
-    b.onclick = () => { cur = m; renderAll(); };
+    b.title = `${cap(monthName(m))} ${y}`;
+    b.className = (i === cur ? 'on' : '') + (cal.photos[m] ? ' has' : '');
+    b.onclick = () => { cur = i; $('evMonth').value = ''; renderAll(); };
     el.append(b);
   }
 }
@@ -227,20 +379,24 @@ function renderEvents() {
   $('countLine').textContent = n ? `${n} ${n === 1 ? 'entry' : 'entries'}` + (unlocked() ? '' : ` · free version holds ${FREE_EVENTS}`) : 'Nothing added yet. Birthdays and events appear in the calendar every year.';
 }
 function renderControls() {
-  $('year').value = cal.year; $('paper').value = cal.paper; $('layout').value = cal.layout; $('weekStart').value = cal.weekStart; $('locale').value = cal.locale; $('font').value = cal.font; $('usHolidays').checked = cal.usHolidays;
-  $('headline').textContent = `${cal.year} calendar`;
+  $('year').value = cal.year; $('paper').value = cal.paper; $('layout').value = cal.layout; $('weekStart').value = cal.weekStart; $('locale').value = cal.locale; $('font').value = cal.font;
+  $('holidays').value = cal.holidays; $('lunar').checked = cal.lunar;
+  const sm = $('startMonth'); sm.innerHTML = Array.from({ length: 12 }, (_, m) => `<option value="${m}">${esc(cap(monthName(m)))}</option>`).join(''); sm.value = cal.start;
+  $('headline').textContent = `${spanTitle()} calendar`;
   const sw = $('swatches');
   sw.textContent = '';
   COLORS.forEach((c) => { const b = document.createElement('button'); b.style.background = c; b.title = 'Color'; b.className = c === cal.color ? 'on' : ''; b.onclick = () => { cal.color = c; renderAll(); save(); }; sw.append(b); });
-  const em = $('evMonth'), keep = em.value === '' ? String(cur) : em.value;
+  const em = $('evMonth'), keep = em.value === '' ? String(slot(cur).m) : em.value;
   em.innerHTML = Array.from({ length: 12 }, (_, m) => `<option value="${m}">${esc(cap(monthName(m)))}</option>`).join('');
   em.value = keep;
-  const has = !!cal.photos[cur], photoLayout = cal.layout === 'photo';
-  $('photoHead').textContent = `Photo for ${cap(monthName(cur))}`;
+  const pm = slot(cur).m, has = !!cal.photos[pm], photoLayout = cal.layout === 'photo';
+  $('photoHead').textContent = `Photo for ${cap(monthName(pm))}`;
+  $('zoomRow').hidden = !has || !photoLayout;
+  $('photoZoom').value = (cal.photoPos[pm] || {}).z || 1;
   $('photoBtn').textContent = has ? 'Change photo' : 'Add a photo';
   $('photoBtn').disabled = !photoLayout;
   $('photoDel').hidden = !has;
-  $('photoHint').textContent = !photoLayout ? 'This page style has no photo.' : unlocked() ? 'Each month can have its own photo.' : `Free version: ${photoCount()} of ${FREE_PHOTOS} photos used.`;
+  $('photoHint').textContent = !photoLayout ? 'This page style has no photo.' : has ? 'Drag the photo to move it, and use Zoom to fill the frame.' : unlocked() ? 'Each month can have its own photo.' : `Free version: ${photoCount()} of ${FREE_PHOTOS} photos used.`;
 }
 function renderAll() { renderControls(); renderMonths(); renderEvents(); renderPage(); }
 
@@ -253,11 +409,17 @@ function shrinkPhoto(file) {
       c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
-      res(c.toDataURL('image/jpeg', 0.86));
+      res({ url: c.toDataURL('image/jpeg', 0.86), ar: img.width / img.height });
     };
     img.onerror = () => { URL.revokeObjectURL(url); toast('That file is not a picture'); rej(new Error('bad image')); };
     img.src = url;
   });
+}
+function ensureAR(m) { // older photos: measure their shape once
+  if (!cal.photos[m] || (cal.photoPos[m] && cal.photoPos[m].ar)) return;
+  const img = new Image();
+  img.onload = () => { cal.photoPos[m] = Object.assign({}, cal.photoPos[m], { ar: img.width / img.height }); renderPage(); save(); };
+  img.src = cal.photos[m];
 }
 function addEvent(m, d, t, text) {
   if (cal.events.length >= FREE_EVENTS && needsPro(`The free version holds ${FREE_EVENTS} birthdays and events. Unlock Pro to add as many as you like.`)) return false;
@@ -267,7 +429,7 @@ function addEvent(m, d, t, text) {
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 60000); toast(`Saved ${name} to your Downloads folder`); }
 function printPages(pages) {
   const landscape = pages[0].w > pages[0].h;
-  $('pageRule').textContent = `@page { size: ${cal.paper === 'a4' ? 'A4' : 'letter'} ${landscape ? 'landscape' : 'portrait'}; margin: 0; }`;
+  $('pageRule').textContent = `@page { size: ${(PAPER[cal.paper] || PAPER.letter)[0]} ${landscape ? 'landscape' : 'portrait'}; margin: 0; }`;
   $('printArea').innerHTML = pages.map((p) => p.svg.replace(/ width="[\d.]+" height="[\d.]+"/, ' preserveAspectRatio="xMidYMid meet"')).join('');
   window.print();
 }
@@ -278,7 +440,7 @@ async function savePicture() {
   c.width = p.w * k; c.height = p.h * k;
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   URL.revokeObjectURL(url);
-  c.toBlob((b) => download(b, `calendar-${cal.year}-${String(cur + 1).padStart(2, '0')}.png`), 'image/png');
+  c.toBlob((b) => download(b, `calendar-${slot(cur).y}-${String(slot(cur).m + 1).padStart(2, '0')}.png`), 'image/png');
 }
 function samplePhoto(m) { // a simple drawn landscape, so the sample works without any files
   const c = document.createElement('canvas'); c.width = 1200; c.height = 760;
@@ -293,7 +455,7 @@ function samplePhoto(m) { // a simple drawn landscape, so the sample works witho
 function loadSample() {
   cal = blank();
   [[0, 14, 'b', 'Grandpa Walter'], [1, 3, 'b', 'Emma'], [2, 21, 'a', 'John & Mary'], [4, 9, 'b', 'Mary'], [5, 18, 'b', 'Noah'], [6, 12, 'o', 'Family reunion'], [7, 2, 'b', 'Sophie'], [8, 27, 'b', 'David'], [9, 16, 'b', 'Grandma Rose'], [10, 8, 'b', 'Ava'], [11, 24, 'o', 'Dinner at our house']].forEach((e) => cal.events.push({ m: e[0], d: e[1], t: e[2], text: e[3] }));
-  for (let m = 0; m < 12; m++) cal.photos[m] = samplePhoto(m);
+  for (let m = 0; m < 12; m++) { cal.photos[m] = samplePhoto(m); cal.photoPos[m] = { ar: 1200 / 760 }; }
   cur = 0;
 }
 function kinleafBirthdays(d) {
@@ -312,38 +474,68 @@ function kinleafBirthdays(d) {
 // ---------- wiring ----------
 const setOpt = (id, key, conv) => $(id).addEventListener('change', (e) => { cal[key] = conv ? conv(e.target.value) : e.target.value; renderAll(); save(); });
 setOpt('paper', 'paper'); setOpt('layout', 'layout'); setOpt('weekStart', 'weekStart', Number); setOpt('locale', 'locale'); setOpt('font', 'font');
-$('usHolidays').onchange = (e) => { cal.usHolidays = e.target.checked; renderAll(); save(); };
+$('holidays').innerHTML = HOLIDAY_SETS.map(([v, n]) => `<option value="${v}">${esc(n)}</option>`).join('');
+$('holidays').onchange = (e) => { cal.holidays = e.target.value; if (cal.holidays === 'VN' && cal.locale === 'en-US') { cal.locale = 'vi'; cal.weekStart = 1; cal.lunar = true; toast('Lịch Việt Nam: tiếng Việt, tuần bắt đầu thứ Hai, có ngày âm lịch'); } renderAll(); save(); };
+$('lunar').onchange = (e) => { cal.lunar = e.target.checked; renderAll(); save(); };
+$('startMonth').onchange = (e) => { const old = slot(cur).m; cal.start = Number(e.target.value); cur = slotOf(old); renderAll(); save(); };
+$('photoZoom').addEventListener('input', (e) => { const m = slot(cur).m; cal.photoPos[m] = Object.assign({}, cal.photoPos[m], { z: Number(e.target.value) }); renderPage(); save(); });
+// drag the photo inside its frame
+let drag = null;
+$('page').addEventListener('pointerdown', (e) => {
+  if (!e.target || e.target.id !== 'photoHit') return;
+  const svg = $('page').querySelector('svg'), m = slot(cur).m, r = e.target;
+  const b = photoBox(m, +r.getAttribute('x'), +r.getAttribute('y'), +r.getAttribute('width'), +r.getAttribute('height'));
+  const k = svg.getScreenCTM().a, p = cal.photoPos[m] || {};
+  drag = { m, k, sx: e.clientX, sy: e.clientY, ox: b.w - b.fw, oy: b.h - b.fh, px: p.x == null ? 0.5 : p.x, py: p.y == null ? 0.5 : p.y };
+  r.setPointerCapture(e.pointerId); e.preventDefault();
+});
+$('page').addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const dx = (e.clientX - drag.sx) / drag.k, dy = (e.clientY - drag.sy) / drag.k, cl = (v) => Math.max(0, Math.min(1, v));
+  cal.photoPos[drag.m] = Object.assign({}, cal.photoPos[drag.m], { x: drag.ox > 0.5 ? cl(drag.px - dx / drag.ox) : 0.5, y: drag.oy > 0.5 ? cl(drag.py - dy / drag.oy) : 0.5 });
+  const keep = drag; renderPage(); drag = keep;
+  const hit = document.getElementById('photoHit'); if (hit) try { hit.setPointerCapture(e.pointerId); } catch (_) {}
+});
+const endDrag = () => { if (drag) { drag = null; save(); } };
+$('page').addEventListener('pointerup', endDrag); $('page').addEventListener('pointercancel', endDrag);
+$('page').addEventListener('wheel', (e) => {
+  if (!e.target || e.target.id !== 'photoHit') return;
+  e.preventDefault();
+  const m = slot(cur).m, p = cal.photoPos[m] || {}, z = Math.max(1, Math.min(3, (p.z || 1) * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
+  cal.photoPos[m] = Object.assign({}, p, { z }); $('photoZoom').value = z; renderPage(); save();
+}, { passive: false });
 $('year').addEventListener('change', () => { const y = parseInt($('year').value, 10); if (y >= 1900 && y <= 2200) cal.year = y; renderAll(); save(); });
 $('prev').onclick = () => { cur = (cur + 11) % 12; $('evMonth').value = ''; renderAll(); };
 $('next').onclick = () => { cur = (cur + 1) % 12; $('evMonth').value = ''; renderAll(); };
 $('photoBtn').onclick = () => {
-  if (!cal.photos[cur] && photoCount() >= FREE_PHOTOS && needsPro(`The free version holds ${FREE_PHOTOS} photos. Unlock Pro to give every month its own photo.`)) return;
-  pickFile('image/*', async (f) => { cal.photos[cur] = await shrinkPhoto(f); renderAll(); save(); });
+  const pm = slot(cur).m;
+  if (!cal.photos[pm] && photoCount() >= FREE_PHOTOS && needsPro(`The free version holds ${FREE_PHOTOS} photos. Unlock Pro to give every month its own photo.`)) return;
+  pickFile('image/*', async (f) => { const r = await shrinkPhoto(f); cal.photos[pm] = r.url; cal.photoPos[pm] = { ar: r.ar }; renderAll(); save(); });
 };
-$('photoDel').onclick = () => { delete cal.photos[cur]; renderAll(); save(); };
+$('photoDel').onclick = () => { const pm = slot(cur).m; delete cal.photos[pm]; delete cal.photoPos[pm]; renderAll(); save(); };
 $('evAdd').onclick = () => {
   const m = Number($('evMonth').value), d = parseInt($('evDay').value, 10), text = $('evText').value.trim();
   if (!(d >= 1 && d <= daysIn(2024, m))) { $('evDay').focus(); toast('Type the day of the month, for example 14'); return; }
   if (!text) { $('evText').focus(); return; }
   if (!addEvent(m, d, $('evType').value, text)) return;
   $('evText').value = ''; $('evDay').value = '';
-  cur = m; renderAll(); save();
+  cur = slotOf(m); renderAll(); save();
   $('evDay').focus();
 };
 $('evText').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('evAdd').click(); });
 $('printOne').onclick = () => printPages([monthSvg(cur, false)]);
-$('printAll').onclick = () => printPages(Array.from({ length: 12 }, (_, m) => monthSvg(m, false)));
+$('printAll').onclick = () => printPages(Array.from({ length: 12 }, (_, i) => monthSvg(i, false)));
 $('imgBtn').onclick = savePicture;
 $('moreBtn').onclick = (e) => { e.stopPropagation(); $('menu').hidden = !$('menu').hidden; };
 document.addEventListener('click', () => { $('menu').hidden = true; });
 $('yearBtn').onclick = () => { if (!needsPro('The one-page year planner is part of Pro.')) printPages([yearSvg()]); };
-$('backupBtn').onclick = () => download(new Blob([JSON.stringify({ app: 'printcal', v: 1, cal })], { type: 'application/json' }), `calendar-${cal.year}.printcal.json`);
+$('backupBtn').onclick = () => download(new Blob([JSON.stringify({ app: 'printcal', v: 1, cal })], { type: 'application/json' }), `calendar-${spanTitle()}.printcal.json`);
 $('restoreFileBtn').onclick = () => pickFile('.json,application/json', async (f) => {
   try {
     const d = JSON.parse(await f.text());
     if (d.app !== 'printcal' || !d.cal || !Array.isArray(d.cal.events)) throw new Error('not a backup');
     if (!confirm('Replace the calendar on screen with the one from this backup file?')) return;
-    cal = Object.assign(blank(), d.cal); cur = 0; renderAll(); save(); toast('Backup opened');
+    cal = upgrade(d.cal); cur = 0; renderAll(); save(); toast('Backup opened');
   } catch (_) { toast('That file is not a PrintCal backup'); }
 });
 $('kinBtn').onclick = () => pickFile('.json,application/json', async (f) => {
@@ -364,8 +556,8 @@ $('restoreBtn').onclick = async () => { proMessage((await checkPro()) ? 'Pro res
 $('closePro').onclick = () => $('proDialog').close();
 
 (async () => {
-  try { const c = await dbGet('cal'); if (c && Array.isArray(c.events)) cal = Object.assign(blank(), c); } catch (_) {}
-  cur = cal.year === new Date().getFullYear() ? new Date().getMonth() : 0;
+  try { const c = await dbGet('cal'); if (c && Array.isArray(c.events)) cal = upgrade(c); } catch (_) {}
+  { const now = new Date(); cur = 0; for (let i = 0; i < 12; i++) { const s = slot(i); if (s.y === now.getFullYear() && s.m === now.getMonth()) cur = i; } }
   setPro(isPro);
   renderAll();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});

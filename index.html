@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PrintCal – Photo Calendar Maker</title>
-  <meta name="description" content="Make and print your own calendar with family photos, birthdays and events. Simple, private and offline.">
+  <meta name="description" content="Make and print your own calendar with family photos, birthdays, holidays for 8 countries and lunar dates. Any start month, A3 to A5. Simple, private and offline.">
   <meta name="theme-color" content="#9f1239">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon-192.png">
@@ -29,7 +29,6 @@
       <button id="restoreFileBtn">Open a backup file…</button>
       <button id="sampleBtn">Load the sample calendar</button>
       <button id="clearBtn" class="danger">Start a new empty calendar…</button>
-      <a href="help.html" target="_blank" rel="noopener">❓ How to use PrintCal</a>
       <a href="mailto:thequan03072002@gmail.com?subject=PrintCal%20feedback">✉ Feedback &amp; support</a>
       <a href="https://apps.microsoft.com/detail/9NRR32J91340" target="_blank" rel="noopener">More apps: Kinleaf family tree maker</a>
       <a href="https://apps.microsoft.com/detail/9NPWMMZ1NPPV" target="_blank" rel="noopener">More apps: PDF Toolbox</a>
@@ -42,8 +41,9 @@
       <h2>Calendar</h2>
       <div class="two">
         <label class="field">Year<input id="year" type="text" inputmode="numeric" maxlength="4"></label>
-        <label class="field">Paper<select id="paper"><option value="letter">Letter (US)</option><option value="a4">A4</option></select></label>
+        <label class="field">Paper<select id="paper"><option value="letter">Letter (US)</option><option value="a4">A4</option><option value="a3">A3 – big wall calendar</option><option value="a5">A5 – desk calendar</option><option value="tabloid">Tabloid 11×17 in</option></select></label>
       </div>
+      <label class="field">First month<select id="startMonth"></select></label>
       <label class="field">Page style
         <select id="layout"><option value="photo">Photo on top, month below</option><option value="grid">Big month grid, no photo</option></select></label>
       <div class="two">
@@ -56,13 +56,15 @@
         <label class="field">Lettering<select id="font"><option value="sans">Modern</option><option value="serif">Classic</option></select></label>
         <div class="field">Color<div id="swatches" class="swatches"></div></div>
       </div>
-      <label class="check"><input id="usHolidays" type="checkbox"> Show US holidays</label>
+      <label class="field">Holidays &amp; special days<select id="holidays"></select></label>
+      <label class="check"><input id="lunar" type="checkbox"> Show lunar dates (âm lịch / 农历)</label>
 
       <h2 id="photoHead">Photo</h2>
       <div class="row-btns" style="margin-top:0">
         <button id="photoBtn" class="primary">Add a photo</button>
         <button id="photoDel" class="ghost" hidden>Remove</button>
       </div>
+      <label id="zoomRow" class="field" hidden>Zoom<input id="photoZoom" type="range" min="1" max="3" step="0.02" value="1"></label>
       <p id="photoHint" class="hint"></p>
 
       <h2>Birthdays &amp; events</h2>
