@@ -23,6 +23,7 @@
       <button id="proBtn" class="pro-btn" hidden>★ Get Pro</button>
     </div>
     <div id="menu" class="menu" hidden>
+      <button id="pdfBtn">📄 Save the whole calendar as a PDF <span class="badge pro-only">PRO</span></button>
       <button id="yearBtn">Print the whole year on one page <span class="badge pro-only">PRO</span></button>
       <button id="kinBtn">Add birthdays from a Kinleaf family tree backup…</button>
       <button id="backupBtn">Save a backup file</button>
@@ -61,6 +62,7 @@
       <label class="check"><input id="lunar" type="checkbox"> Show lunar dates (âm lịch / 农历)</label>
 
       <h2 id="photoHead">Photo</h2>
+      <label id="collageRow" class="field">Photos on this page<select id="collage"><option value="1">One photo</option><option value="2">Two side by side</option><option value="3">One large + two small</option><option value="4">Four photos</option></select></label>
       <div class="row-btns" style="margin-top:0">
         <button id="photoBtn" class="primary">Add a photo</button>
         <button id="photoDel" class="ghost" hidden>Remove</button>
@@ -96,9 +98,10 @@
     <h2>PrintCal Pro</h2>
     <p class="muted">One-time purchase. Yours forever on this Microsoft account.</p>
     <ul class="pro-list">
-      <li><strong>A photo for every month</strong> <span class="muted">(Free: 3 photos)</span></li>
+      <li><strong>Photos for every month</strong> – up to 4 per page as a collage <span class="muted">(Free: 3 photos)</span></li>
       <li><strong>Unlimited birthdays and events</strong> <span class="muted">(Free: 12)</span></li>
       <li><strong>Whole year on one page</strong> – a wall planner to print</li>
+      <li><strong>Save the whole calendar as a PDF</strong> – print it at a copy shop or send it to family</li>
     </ul>
     <p id="proMsg" class="pro-msg" hidden></p>
     <div class="row-btns">

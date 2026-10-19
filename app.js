@@ -85,17 +85,22 @@ function needsPro(reason) {
 // ---------- data ----------
 const COLORS = ['#9f1239', '#1d4ed8', '#166534', '#b45309', '#6d28d9', '#0f766e', '#374151'];
 const defaultYear = () => { const d = new Date(); return d.getFullYear() + (d.getMonth() >= 8 ? 1 : 0); };
-const blank = () => ({ year: defaultYear(), start: 0, paper: 'letter', layout: 'photo', weekStart: 0, locale: 'en-US', font: 'sans', color: COLORS[0], holidays: 'US', lunar: false, events: [], photos: {}, photoPos: {} });
+const blank = () => ({ year: defaultYear(), start: 0, paper: 'letter', layout: 'photo', weekStart: 0, locale: 'en-US', font: 'sans', color: COLORS[0], holidays: 'US', lunar: false, events: [], photos: {}, photoPos: {}, collage: {} });
 function upgrade(c) { // older saved calendars
   const o = Object.assign(blank(), c);
   if (c && c.holidays == null) o.holidays = c.usHolidays === false ? 'none' : 'US';
   if (!o.photoPos) o.photoPos = {};
+  if (!o.collage) o.collage = {};
   delete o.usHolidays;
   return o;
 }
 let cal = blank();
 let cur = 0; // month shown
-const photoCount = () => Object.keys(cal.photos).filter((k) => cal.photos[k]).length;
+// a month page can hold 1–4 photos; the first is stored under the month number, the others as "month.frame"
+const fkey = (m, j) => (j ? `${m}.${j}` : String(m));
+const nFrames = (m) => Math.max(1, Math.min(4, cal.collage[m] || 1));
+const photoCount = () => { let n = 0; for (let m = 0; m < 12; m++) for (let j = 0; j < nFrames(m); j++) if (cal.photos[fkey(m, j)]) n++; return n; };
+let curFrame = 0;
 
 function idb() {
   return new Promise((res, rej) => {
@@ -305,6 +310,31 @@ function photoBox(m, x, y, w, h) {
   const px = p.x == null ? 0.5 : p.x, py = p.y == null ? 0.5 : p.y;
   return { x: x - (dw - w) * px, y: y - (dh - h) * py, w: dw, h: dh, fx: x, fy: y, fw: w, fh: h };
 }
+function frames(n, x, y, w, h) {
+  const g = 6, hw = (w - g) / 2, hh = (h - g) / 2;
+  if (n === 2) return [[x, y, hw, h], [x + hw + g, y, hw, h]];
+  if (n === 3) { const bw = Math.round((w - g) * 0.6), sw = w - g - bw; return [[x, y, bw, h], [x + bw + g, y, sw, hh], [x + bw + g, y + hh + g, sw, hh]]; }
+  if (n === 4) return [[x, y, hw, hh], [x + hw + g, y, hw, hh], [x, y + hh + g, hw, hh], [x + hw + g, y + hh + g, hw, hh]];
+  return [[x, y, w, h]];
+}
+function photosSvg(m, x, y, w, h, forScreen) {
+  const n = nFrames(m);
+  if (n === 1 && !cal.photos[fkey(m, 0)]) return landscapePic(m, x, y, w, h) + (forScreen ? `<rect class="photoAdd" data-j="0" x="${x}" y="${y}" width="${w}" height="${h}" fill="transparent" style="cursor:pointer"/><text x="${x + w / 2}" y="${y + h - 24}" text-anchor="middle" font-size="13" fill="#fff" opacity=".9" pointer-events="none">Click here or use the button on the left to add a photo</text>` : '');
+  let s = '';
+  frames(n, x, y, w, h).forEach(([fx, fy, fw, fh], j) => {
+    const k = fkey(m, j), photo = cal.photos[k];
+    if (photo) {
+      const b = photoBox(k, fx, fy, fw, fh);
+      s += `<clipPath id="pc${m}_${j}"><rect x="${fx}" y="${fy}" width="${fw}" height="${fh}"/></clipPath><image href="${photo}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="none" clip-path="url(#pc${m}_${j})"/>`;
+      if (forScreen) s += `<rect class="photoHit" data-k="${k}" data-j="${j}" x="${fx}" y="${fy}" width="${fw}" height="${fh}" fill="transparent" style="cursor:move"/>`;
+    } else {
+      s += `<rect x="${fx}" y="${fy}" width="${fw}" height="${fh}" fill="${cal.color}" opacity=".16"/>`;
+      if (forScreen) s += `<rect class="photoAdd" data-j="${j}" x="${fx}" y="${fy}" width="${fw}" height="${fh}" fill="transparent" stroke="${cal.color}" stroke-dasharray="6 5" style="cursor:pointer"/><text x="${fx + fw / 2}" y="${fy + fh / 2 + 5}" text-anchor="middle" font-size="14" fill="${cal.color}" pointer-events="none">+ Add a photo</text>`;
+    }
+    if (forScreen && n > 1 && j === curFrame) s += `<rect x="${fx + 1.5}" y="${fy + 1.5}" width="${fw - 3}" height="${fh - 3}" fill="none" stroke="#2563eb" stroke-width="3" pointer-events="none"/>`;
+  });
+  return s;
+}
 function landscapePic(m, x, y, w, h) { // placeholder shown (and printed) when a month has no photo
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${cal.color}"/><text x="${x + w / 2}" y="${y + h / 2 + 22}" text-anchor="middle" font-size="64" font-weight="700" fill="#fff" opacity=".92">${esc(cap(monthName(m)))}</text>`;
 }
@@ -317,9 +347,7 @@ function monthSvg(i, forScreen) {
     body += gridSvg(Y, m, M, M + 52, W - 2 * M, H - 2 * M - 52);
   } else {
     const ph = Math.round(H * 0.44);
-    const photo = cal.photos[m];
-    if (photo) { const b = photoBox(m, M, M, W - 2 * M, ph); body += `<clipPath id="pc${m}"><rect x="${M}" y="${M}" width="${W - 2 * M}" height="${ph}"/></clipPath><image href="${photo}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="none" clip-path="url(#pc${m})"/>`; if (forScreen) body += `<rect id="photoHit" x="${M}" y="${M}" width="${W - 2 * M}" height="${ph}" fill="transparent" style="cursor:move"/>`; }
-    else body += landscapePic(m, M, M, W - 2 * M, ph) + (forScreen ? `<text x="${W / 2}" y="${M + ph - 24}" text-anchor="middle" font-size="13" fill="#fff" opacity=".9">Add a photo for this month with the button on the left</text>` : '');
+    body += photosSvg(m, M, M, W - 2 * M, ph, forScreen);
     const ty = M + ph + 40;
     body += `<text x="${M}" y="${ty}" font-size="32" font-weight="700" fill="${cal.color}">${esc(cap(monthName(m)))}</text><text x="${W - M}" y="${ty}" text-anchor="end" font-size="32" font-weight="300" fill="#6b7280">${Y}</text>`;
     body += gridSvg(Y, m, M, ty + 14, W - 2 * M, H - M - ty - 14);
@@ -357,8 +385,8 @@ function renderMonths() {
     const { y, m } = slot(i), b = document.createElement('button');
     b.textContent = cap(monthName(m, 'short')).replace('.', '');
     b.title = `${cap(monthName(m))} ${y}`;
-    b.className = (i === cur ? 'on' : '') + (cal.photos[m] ? ' has' : '');
-    b.onclick = () => { cur = i; $('evMonth').value = ''; renderAll(); };
+    b.className = (i === cur ? 'on' : '') + (Array.from({ length: nFrames(m) }, (_, j) => cal.photos[fkey(m, j)]).some(Boolean) ? ' has' : '');
+    b.onclick = () => { cur = i; curFrame = 0; $('evMonth').value = ''; renderAll(); };
     el.append(b);
   }
 }
@@ -389,14 +417,17 @@ function renderControls() {
   const em = $('evMonth'), keep = em.value === '' ? String(slot(cur).m) : em.value;
   em.innerHTML = Array.from({ length: 12 }, (_, m) => `<option value="${m}">${esc(cap(monthName(m)))}</option>`).join('');
   em.value = keep;
-  const pm = slot(cur).m, has = !!cal.photos[pm], photoLayout = cal.layout === 'photo';
-  $('photoHead').textContent = `Photo for ${cap(monthName(pm))}`;
+  const pm = slot(cur).m, n = nFrames(pm);
+  if (curFrame >= n) curFrame = 0;
+  const key = fkey(pm, curFrame), has = !!cal.photos[key], photoLayout = cal.layout === 'photo';
+  $('photoHead').textContent = n > 1 ? `Photos for ${cap(monthName(pm))}` : `Photo for ${cap(monthName(pm))}`;
+  $('collage').value = String(n); $('collageRow').hidden = !photoLayout;
   $('zoomRow').hidden = !has || !photoLayout;
-  $('photoZoom').value = (cal.photoPos[pm] || {}).z || 1;
-  $('photoBtn').textContent = has ? 'Change photo' : 'Add a photo';
+  $('photoZoom').value = (cal.photoPos[key] || {}).z || 1;
+  $('photoBtn').textContent = (has ? 'Change photo' : 'Add a photo') + (n > 1 ? ` ${curFrame + 1}` : '');
   $('photoBtn').disabled = !photoLayout;
   $('photoDel').hidden = !has;
-  $('photoHint').textContent = !photoLayout ? 'This page style has no photo.' : has ? 'Drag the photo to move it, and use Zoom to fill the frame.' : unlocked() ? 'Each month can have its own photo.' : `Free version: ${photoCount()} of ${FREE_PHOTOS} photos used.`;
+  $('photoHint').textContent = !photoLayout ? 'This page style has no photo.' : (n > 1 ? `Click a frame on the page to choose it (photo ${curFrame + 1} of ${n} is selected). ` : '') + (has ? 'Drag the photo to move it, and use Zoom to fill the frame.' : unlocked() ? 'Each month can have its own photos.' : `Free version: ${photoCount()} of ${FREE_PHOTOS} photos used.`);
 }
 function renderAll() { renderControls(); renderMonths(); renderEvents(); renderPage(); }
 
@@ -416,10 +447,13 @@ function shrinkPhoto(file) {
   });
 }
 function ensureAR(m) { // older photos: measure their shape once
-  if (!cal.photos[m] || (cal.photoPos[m] && cal.photoPos[m].ar)) return;
-  const img = new Image();
-  img.onload = () => { cal.photoPos[m] = Object.assign({}, cal.photoPos[m], { ar: img.width / img.height }); renderPage(); save(); };
-  img.src = cal.photos[m];
+  for (let j = 0; j < nFrames(m); j++) {
+    const k = fkey(m, j);
+    if (!cal.photos[k] || (cal.photoPos[k] && cal.photoPos[k].ar)) continue;
+    const img = new Image();
+    img.onload = () => { cal.photoPos[k] = Object.assign({}, cal.photoPos[k], { ar: img.width / img.height }); renderPage(); save(); };
+    img.src = cal.photos[k];
+  }
 }
 function addEvent(m, d, t, text) {
   if (cal.events.length >= FREE_EVENTS && needsPro(`The free version holds ${FREE_EVENTS} birthdays and events. Unlock Pro to add as many as you like.`)) return false;
@@ -478,41 +512,53 @@ $('holidays').innerHTML = HOLIDAY_SETS.map(([v, n]) => `<option value="${v}">${e
 $('holidays').onchange = (e) => { cal.holidays = e.target.value; if (cal.holidays === 'VN' && cal.locale === 'en-US') { cal.locale = 'vi'; cal.weekStart = 1; cal.lunar = true; toast('Lịch Việt Nam: tiếng Việt, tuần bắt đầu thứ Hai, có ngày âm lịch'); } renderAll(); save(); };
 $('lunar').onchange = (e) => { cal.lunar = e.target.checked; renderAll(); save(); };
 $('startMonth').onchange = (e) => { const old = slot(cur).m; cal.start = Number(e.target.value); cur = slotOf(old); renderAll(); save(); };
-$('photoZoom').addEventListener('input', (e) => { const m = slot(cur).m; cal.photoPos[m] = Object.assign({}, cal.photoPos[m], { z: Number(e.target.value) }); renderPage(); save(); });
-// drag the photo inside its frame
+$('photoZoom').addEventListener('input', (e) => { const k = fkey(slot(cur).m, curFrame); cal.photoPos[k] = Object.assign({}, cal.photoPos[k], { z: Number(e.target.value) }); renderPage(); save(); });
+$('collage').onchange = (e) => { cal.collage[slot(cur).m] = Number(e.target.value); curFrame = 0; renderAll(); save(); };
+// drag the photo inside its frame; click a frame to choose it; click an empty frame to add a photo
 let drag = null;
 $('page').addEventListener('pointerdown', (e) => {
-  if (!e.target || e.target.id !== 'photoHit') return;
-  const svg = $('page').querySelector('svg'), m = slot(cur).m, r = e.target;
-  const b = photoBox(m, +r.getAttribute('x'), +r.getAttribute('y'), +r.getAttribute('width'), +r.getAttribute('height'));
-  const k = svg.getScreenCTM().a, p = cal.photoPos[m] || {};
-  drag = { m, k, sx: e.clientX, sy: e.clientY, ox: b.w - b.fw, oy: b.h - b.fh, px: p.x == null ? 0.5 : p.x, py: p.y == null ? 0.5 : p.y };
-  r.setPointerCapture(e.pointerId); e.preventDefault();
+  const t = e.target;
+  if (t && t.classList && t.classList.contains('photoAdd')) { curFrame = Number(t.dataset.j) || 0; renderAll(); $('photoBtn').click(); return; }
+  if (!t || !t.classList || !t.classList.contains('photoHit')) return;
+  const svg = $('page').querySelector('svg'), k = t.dataset.k;
+  const b = photoBox(k, +t.getAttribute('x'), +t.getAttribute('y'), +t.getAttribute('width'), +t.getAttribute('height'));
+  const sc = svg.getScreenCTM().a, p = cal.photoPos[k] || {};
+  drag = { k, j: Number(t.dataset.j) || 0, sc, sx: e.clientX, sy: e.clientY, ox: b.w - b.fw, oy: b.h - b.fh, px: p.x == null ? 0.5 : p.x, py: p.y == null ? 0.5 : p.y, moved: false };
+  t.setPointerCapture(e.pointerId); e.preventDefault();
 });
 $('page').addEventListener('pointermove', (e) => {
   if (!drag) return;
-  const dx = (e.clientX - drag.sx) / drag.k, dy = (e.clientY - drag.sy) / drag.k, cl = (v) => Math.max(0, Math.min(1, v));
-  cal.photoPos[drag.m] = Object.assign({}, cal.photoPos[drag.m], { x: drag.ox > 0.5 ? cl(drag.px - dx / drag.ox) : 0.5, y: drag.oy > 0.5 ? cl(drag.py - dy / drag.oy) : 0.5 });
+  const dx = (e.clientX - drag.sx) / drag.sc, dy = (e.clientY - drag.sy) / drag.sc, cl = (v) => Math.max(0, Math.min(1, v));
+  if (!drag.moved && Math.hypot(dx, dy) < 2) return;
+  drag.moved = true;
+  cal.photoPos[drag.k] = Object.assign({}, cal.photoPos[drag.k], { x: drag.ox > 0.5 ? cl(drag.px - dx / drag.ox) : 0.5, y: drag.oy > 0.5 ? cl(drag.py - dy / drag.oy) : 0.5 });
   const keep = drag; renderPage(); drag = keep;
-  const hit = document.getElementById('photoHit'); if (hit) try { hit.setPointerCapture(e.pointerId); } catch (_) {}
+  const hit = $('page').querySelector(`.photoHit[data-k="${drag.k}"]`); if (hit) try { hit.setPointerCapture(e.pointerId); } catch (_) {}
 });
-const endDrag = () => { if (drag) { drag = null; save(); } };
+const endDrag = () => {
+  if (!drag) return;
+  const d = drag; drag = null;
+  if (d.j !== curFrame) { curFrame = d.j; renderAll(); }
+  if (d.moved) save();
+};
 $('page').addEventListener('pointerup', endDrag); $('page').addEventListener('pointercancel', endDrag);
 $('page').addEventListener('wheel', (e) => {
-  if (!e.target || e.target.id !== 'photoHit') return;
+  const t = e.target;
+  if (!t || !t.classList || !t.classList.contains('photoHit')) return;
   e.preventDefault();
-  const m = slot(cur).m, p = cal.photoPos[m] || {}, z = Math.max(1, Math.min(3, (p.z || 1) * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
-  cal.photoPos[m] = Object.assign({}, p, { z }); $('photoZoom').value = z; renderPage(); save();
+  const k = t.dataset.k, p = cal.photoPos[k] || {}, z = Math.max(1, Math.min(3, (p.z || 1) * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
+  curFrame = Number(t.dataset.j) || 0;
+  cal.photoPos[k] = Object.assign({}, p, { z }); $('photoZoom').value = z; renderPage(); save();
 }, { passive: false });
 $('year').addEventListener('change', () => { const y = parseInt($('year').value, 10); if (y >= 1900 && y <= 2200) cal.year = y; renderAll(); save(); });
-$('prev').onclick = () => { cur = (cur + 11) % 12; $('evMonth').value = ''; renderAll(); };
-$('next').onclick = () => { cur = (cur + 1) % 12; $('evMonth').value = ''; renderAll(); };
+$('prev').onclick = () => { cur = (cur + 11) % 12; curFrame = 0; $('evMonth').value = ''; renderAll(); };
+$('next').onclick = () => { cur = (cur + 1) % 12; curFrame = 0; $('evMonth').value = ''; renderAll(); };
 $('photoBtn').onclick = () => {
-  const pm = slot(cur).m;
-  if (!cal.photos[pm] && photoCount() >= FREE_PHOTOS && needsPro(`The free version holds ${FREE_PHOTOS} photos. Unlock Pro to give every month its own photo.`)) return;
-  pickFile('image/*', async (f) => { const r = await shrinkPhoto(f); cal.photos[pm] = r.url; cal.photoPos[pm] = { ar: r.ar }; renderAll(); save(); });
+  const k = fkey(slot(cur).m, curFrame);
+  if (!cal.photos[k] && photoCount() >= FREE_PHOTOS && needsPro(`The free version holds ${FREE_PHOTOS} photos. Unlock Pro to give every month its own photos.`)) return;
+  pickFile('image/*', async (f) => { const r = await shrinkPhoto(f); cal.photos[k] = r.url; cal.photoPos[k] = { ar: r.ar }; renderAll(); save(); });
 };
-$('photoDel').onclick = () => { const pm = slot(cur).m; delete cal.photos[pm]; delete cal.photoPos[pm]; renderAll(); save(); };
+$('photoDel').onclick = () => { const k = fkey(slot(cur).m, curFrame); delete cal.photos[k]; delete cal.photoPos[k]; renderAll(); save(); };
 $('evAdd').onclick = () => {
   const m = Number($('evMonth').value), d = parseInt($('evDay').value, 10), text = $('evText').value.trim();
   if (!(d >= 1 && d <= daysIn(2024, m))) { $('evDay').focus(); toast('Type the day of the month, for example 14'); return; }
@@ -526,6 +572,64 @@ $('evText').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('evAdd
 $('printOne').onclick = () => printPages([monthSvg(cur, false)]);
 $('printAll').onclick = () => printPages(Array.from({ length: 12 }, (_, i) => monthSvg(i, false)));
 $('imgBtn').onclick = savePicture;
+// ---------- save the whole calendar as one PDF ----------
+const PAPER_MM = { letter: [215.9, 279.4], a4: [210, 297], a3: [297, 420], a5: [148, 210], tabloid: [279.4, 431.8] };
+function jpegPdf(pages) { // pages: [{ jpeg: Uint8Array, px: [w, h], mm: [w, h] }]
+  const enc = (s) => new TextEncoder().encode(s), parts = [], offs = [];
+  let len = 0;
+  const add = (b) => { const u = typeof b === 'string' ? enc(b) : b; parts.push(u); len += u.length; };
+  const obj = (n, body) => { offs[n] = len; add(`${n} 0 obj\n`); body(); add('\nendobj\n'); };
+  add('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+  const n = pages.length, kids = pages.map((_, i) => `${3 + i * 3} 0 R`).join(' ');
+  obj(1, () => add('<< /Type /Catalog /Pages 2 0 R >>'));
+  obj(2, () => add(`<< /Type /Pages /Count ${n} /Kids [${kids}] >>`));
+  pages.forEach((p, i) => {
+    const pg = 3 + i * 3, im = pg + 1, ct = pg + 2, W = p.mm[0] * 72 / 25.4, H = p.mm[1] * 72 / 25.4;
+    obj(pg, () => add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W.toFixed(2)} ${H.toFixed(2)}] /Resources << /XObject << /Im0 ${im} 0 R >> >> /Contents ${ct} 0 R >>`));
+    obj(im, () => { add(`<< /Type /XObject /Subtype /Image /Width ${p.px[0]} /Height ${p.px[1]} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.jpeg.length} >>\nstream\n`); add(p.jpeg); add('\nendstream'); });
+    const c = `q ${W.toFixed(2)} 0 0 ${H.toFixed(2)} 0 0 cm /Im0 Do Q`;
+    obj(ct, () => add(`<< /Length ${c.length} >>\nstream\n${c}\nendstream`));
+  });
+  const xref = len, total = 3 + n * 3;
+  let x = `xref\n0 ${total}\n0000000000 65535 f \n`;
+  for (let k = 1; k < total; k++) x += String(offs[k]).padStart(10, '0') + ' 00000 n \n';
+  add(x + `trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  const out = new Uint8Array(len); let p2 = 0; for (const u of parts) { out.set(u, p2); p2 += u.length; } return out;
+}
+function svgToJpeg(page, pxPerMm) {
+  const land = page.w > page.h, mm = PAPER_MM[cal.paper] || PAPER_MM.letter, [wMm, hMm] = land ? [mm[1], mm[0]] : mm;
+  return new Promise((res, rej) => {
+    const img = new Image(), url = URL.createObjectURL(new Blob([page.svg], { type: 'image/svg+xml' }));
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = Math.round(wMm * pxPerMm); c.height = Math.round(hMm * pxPerMm);
+      const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+      // keep the page's shape on paper (A3/A5 use the A4 shape, which is the same)
+      const k = Math.min(c.width / page.w, c.height / page.h), dw = page.w * k, dh = page.h * k;
+      x.drawImage(img, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
+      URL.revokeObjectURL(url);
+      c.toBlob(async (b) => b ? res({ jpeg: new Uint8Array(await b.arrayBuffer()), px: [c.width, c.height], mm: [wMm, hMm] }) : rej(new Error('jpeg')), 'image/jpeg', 0.9);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('A page could not be drawn.')); };
+    img.src = url;
+  });
+}
+let pdfBusy = false;
+async function savePdf() {
+  if (pdfBusy) return;
+  if (needsPro('Saving the whole calendar as a PDF is part of Pro.')) return;
+  pdfBusy = true;
+  try {
+    const pages = Array.from({ length: 12 }, (_, i) => monthSvg(i, false));
+    pages.push(yearSvg()); // the year planner as the last page
+    const mm = PAPER_MM[cal.paper] || PAPER_MM.letter, px = Math.min(11.8, 4200 / Math.max(...mm)); // about 300 dpi, less for very large paper
+    const out = [];
+    for (let i = 0; i < pages.length; i++) { toast(`Making the PDF… page ${i + 1} of ${pages.length}`); out.push(await svgToJpeg(pages[i], px)); }
+    download(new Blob([jpegPdf(out)], { type: 'application/pdf' }), `calendar-${spanTitle()}.pdf`);
+  } catch (e) { toast('The PDF could not be made: ' + e.message); }
+  pdfBusy = false;
+}
+$('pdfBtn').onclick = savePdf;
+
 $('moreBtn').onclick = (e) => { e.stopPropagation(); $('menu').hidden = !$('menu').hidden; };
 document.addEventListener('click', () => { $('menu').hidden = true; });
 $('yearBtn').onclick = () => { if (!needsPro('The one-page year planner is part of Pro.')) printPages([yearSvg()]); };
