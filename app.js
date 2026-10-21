@@ -85,12 +85,13 @@ function needsPro(reason) {
 // ---------- data ----------
 const COLORS = ['#9f1239', '#1d4ed8', '#166534', '#b45309', '#6d28d9', '#0f766e', '#374151'];
 const defaultYear = () => { const d = new Date(); return d.getFullYear() + (d.getMonth() >= 8 ? 1 : 0); };
-const blank = () => ({ year: defaultYear(), start: 0, paper: 'letter', layout: 'photo', weekStart: 0, locale: 'en-US', font: 'sans', color: COLORS[0], holidays: 'US', lunar: false, events: [], photos: {}, photoPos: {}, collage: {} });
+const blank = () => ({ year: defaultYear(), start: 0, paper: 'letter', layout: 'photo', weekStart: 0, locale: 'en-US', font: 'sans', color: COLORS[0], holidays: 'US', lunar: false, events: [], photos: {}, photoPos: {}, collage: {}, make: 'calendar', card: { greet: 'Merry Christmas', custom: '', msg: 'Wishing you joy, peace and love this holiday season', sign: 'Love, The Carter Family', year: true, theme: 'holly', lay: 'left' }, tags: { to: '', from: '' } });
 function upgrade(c) { // older saved calendars
   const o = Object.assign(blank(), c);
   if (c && c.holidays == null) o.holidays = c.usHolidays === false ? 'none' : 'US';
   if (!o.photoPos) o.photoPos = {};
   if (!o.collage) o.collage = {};
+  o.card = Object.assign(blank().card, c && c.card); o.tags = Object.assign(blank().tags, c && c.tags);
   delete o.usHolidays;
   return o;
 }
@@ -317,7 +318,8 @@ function frames(n, x, y, w, h) {
   if (n === 4) return [[x, y, hw, hh], [x + hw + g, y, hw, hh], [x, y + hh + g, hw, hh], [x + hw + g, y + hh + g, hw, hh]];
   return [[x, y, w, h]];
 }
-function photosSvg(m, x, y, w, h, forScreen) {
+function photosSvg(m, x, y, w, h, forScreen, uid) {
+  uid = uid || '';
   const n = nFrames(m);
   if (n === 1 && !cal.photos[fkey(m, 0)]) return landscapePic(m, x, y, w, h) + (forScreen ? `<rect class="photoAdd" data-j="0" x="${x}" y="${y}" width="${w}" height="${h}" fill="transparent" style="cursor:pointer"/><text x="${x + w / 2}" y="${y + h - 24}" text-anchor="middle" font-size="13" fill="#fff" opacity=".9" pointer-events="none">Click here or use the button on the left to add a photo</text>` : '');
   let s = '';
@@ -325,7 +327,7 @@ function photosSvg(m, x, y, w, h, forScreen) {
     const k = fkey(m, j), photo = cal.photos[k];
     if (photo) {
       const b = photoBox(k, fx, fy, fw, fh);
-      s += `<clipPath id="pc${m}_${j}"><rect x="${fx}" y="${fy}" width="${fw}" height="${fh}"/></clipPath><image href="${photo}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="none" clip-path="url(#pc${m}_${j})"/>`;
+      s += `<clipPath id="pc${m}_${j}${uid}"><rect x="${fx}" y="${fy}" width="${fw}" height="${fh}"/></clipPath><image href="${photo}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="none" clip-path="url(#pc${m}_${j}${uid})"/>`;
       if (forScreen) s += `<rect class="photoHit" data-k="${k}" data-j="${j}" x="${fx}" y="${fy}" width="${fw}" height="${fh}" fill="transparent" style="cursor:move"/>`;
     } else {
       s += `<rect x="${fx}" y="${fy}" width="${fw}" height="${fh}" fill="${cal.color}" opacity=".16"/>`;
@@ -336,6 +338,7 @@ function photosSvg(m, x, y, w, h, forScreen) {
   return s;
 }
 function landscapePic(m, x, y, w, h) { // placeholder shown (and printed) when a month has no photo
+  if (m === 'card') { const t = theme(); return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${t.soft}" opacity=".25"/>` + decorations(x, y, w, h, h / 300) + `<text x="${x + w / 2}" y="${y + h / 2 + 6}" text-anchor="middle" font-size="${h / 18}" fill="${t.ink}" opacity=".75">Your photo here</text>`; }
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${cal.color}"/><text x="${x + w / 2}" y="${y + h / 2 + 22}" text-anchor="middle" font-size="64" font-weight="700" fill="#fff" opacity=".92">${esc(cap(monthName(m)))}</text>`;
 }
 const fontFamily = () => (cal.font === 'serif' ? 'Georgia, Cambria, serif' : 'Segoe UI, system-ui, sans-serif');
@@ -374,10 +377,141 @@ function yearSvg() {
   return { w: W, h: H, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="${fontFamily()}">${body}</svg>` };
 }
 
+
+// ---------- holiday photo cards and gift tags ----------
+const GREETINGS = ['Merry Christmas', 'Happy Holidays', "Season's Greetings", 'Happy New Year', 'Merry Christmas & Happy New Year', 'Happy Hanukkah', 'Joyeux Noël', 'Feliz Navidad', 'Frohe Weihnachten', 'Buon Natale', 'Chúc mừng Giáng sinh', 'Chúc mừng năm mới'];
+const THEMES = {
+  holly: { name: 'Holly', bg: '#fbf7f0', ink: '#7f1d1d', soft: '#166534', deco: 'holly', script: true },
+  snow: { name: 'Snowflakes', bg: '#eaf2fb', ink: '#1e3a8a', soft: '#3b82f6', deco: 'snow', script: false },
+  evergreen: { name: 'Evergreen', bg: '#14532d', ink: '#fef3c7', soft: '#facc15', deco: 'trees', script: true, pro: true },
+  gold: { name: 'Gold & white', bg: '#fffdf7', ink: '#854d0e', soft: '#ca8a04', deco: 'stars', script: true, pro: true },
+  kraft: { name: 'Kraft paper', bg: '#d6b48a', ink: '#3f2a14', soft: '#7c2d12', deco: 'trees', script: true, pro: true },
+  night: { name: 'Silent night', bg: '#0f172a', ink: '#f8fafc', soft: '#fde68a', deco: 'stars', script: false, pro: true },
+};
+const theme = () => THEMES[cal.card.theme] || THEMES.holly;
+const scriptFont = "'Segoe Script', 'Brush Script MT', 'Lucida Handwriting', Georgia, cursive";
+function snowflake(x, y, r, c, o) {
+  let s = `<g transform="translate(${x},${y})" stroke="${c}" stroke-width="${Math.max(1, r / 9)}" stroke-linecap="round" opacity="${o}">`;
+  for (let k = 0; k < 6; k++) s += `<g transform="rotate(${k * 60})"><line x1="0" y1="0" x2="0" y2="${-r}"/><line x1="0" y1="${-r * 0.55}" x2="${r * 0.25}" y2="${-r * 0.78}"/><line x1="0" y1="${-r * 0.55}" x2="${-r * 0.25}" y2="${-r * 0.78}"/></g>`;
+  return s + '</g>';
+}
+function holly(x, y, r, rot) {
+  const leaf = (a) => `<path transform="rotate(${a})" d="M0,0 C${r * 0.3},${-r * 0.25} ${r * 0.75},${-r * 0.3} ${r * 1.1},0 C${r * 0.75},${r * 0.3} ${r * 0.3},${r * 0.25} 0,0Z" fill="#166534"/>`;
+  return `<g transform="translate(${x},${y}) rotate(${rot})">${leaf(-25)}${leaf(205)}<circle cx="${-r * 0.08}" cy="${-r * 0.12}" r="${r * 0.17}" fill="#b91c1c"/><circle cx="${r * 0.16}" cy="${-r * 0.02}" r="${r * 0.17}" fill="#dc2626"/><circle cx="${-r * 0.02}" cy="${r * 0.18}" r="${r * 0.17}" fill="#991b1b"/></g>`;
+}
+function star(x, y, r, c, o) {
+  let d = '';
+  for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? r * 0.42 : r; d += (k ? 'L' : 'M') + (x + rr * Math.cos(a)).toFixed(1) + ',' + (y + rr * Math.sin(a)).toFixed(1); }
+  return `<path d="${d}Z" fill="${c}" opacity="${o}"/>`;
+}
+function tree(x, y, h, c, o) {
+  const w = h * 0.62;
+  return `<g opacity="${o}" fill="${c}"><path d="M${x},${y - h} L${x + w * 0.38},${y - h * 0.55} L${x - w * 0.38},${y - h * 0.55}Z"/><path d="M${x},${y - h * 0.75} L${x + w * 0.5},${y - h * 0.25} L${x - w * 0.5},${y - h * 0.25}Z"/><path d="M${x},${y - h * 0.5} L${x + w * 0.62},${y - h * 0.06} L${x - w * 0.62},${y - h * 0.06}Z"/><rect x="${x - h * 0.05}" y="${y - h * 0.07}" width="${h * 0.1}" height="${h * 0.12}"/></g>`;
+}
+// decorations scattered over an area, always in the same places (seeded)
+function decorations(x, y, w, h, scale) {
+  const t = theme(); let s = '', seed = 7;
+  const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  const ry = () => (rnd() < 0.55 ? y + rnd() * h * 0.2 : y + h * 0.8 + rnd() * h * 0.18); // keep the middle free for the words
+  if (t.deco === 'holly') { s += holly(x + w - 26 * scale, y + 26 * scale, 26 * scale, 20) + holly(x + 24 * scale, y + h - 22 * scale, 20 * scale, 200); }
+  else if (t.deco === 'snow') { for (let k = 0; k < 9; k++) s += snowflake(x + rnd() * w, ry(), (6 + rnd() * 10) * scale, t.soft, 0.18 + rnd() * 0.25); }
+  else if (t.deco === 'stars') { for (let k = 0; k < 10; k++) s += star(x + rnd() * w, ry(), (3 + rnd() * 6) * scale, t.soft, 0.35 + rnd() * 0.5); }
+  else if (t.deco === 'trees') { for (let k = 0; k < 4; k++) s += tree(x + w * (0.12 + k * 0.25), y + h - 6 * scale, (16 + (k % 2) * 8) * scale, t.soft, 0.55); }
+  return s;
+}
+function fitFont(text, maxW, base, ratio) { return Math.min(base, maxW / Math.max(1, String(text).length * ratio)); }
+const greetingText = () => (cal.card.greet === 'custom' ? cal.card.custom : cal.card.greet) || '';
+function cardSvg(x, y, w, h, forScreen, uid) {
+  const t = theme(), c = cal.card, sc = h / 360;
+  let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${t.bg}"/>`;
+  const greet = greetingText(), gf = t.script ? scriptFont : 'Georgia, serif';
+  const lines = (txt, cx, ty, maxW, fs, fill, weight, family, style) => {
+    // wrap into at most 3 lines
+    const words = String(txt || '').split(/\s+/).filter(Boolean), out = []; let cur = '';
+    const cw = fs * 0.5;
+    words.forEach((wd) => { if ((cur + ' ' + wd).trim().length * cw > maxW && cur) { out.push(cur); cur = wd; } else cur = (cur + ' ' + wd).trim(); });
+    if (cur) out.push(cur);
+    return out.slice(0, 3).map((ln, i) => `<text x="${cx}" y="${ty + i * fs * 1.3}" text-anchor="middle" font-size="${fs}" font-weight="${weight || 400}" font-family="${family || 'Georgia, serif'}" ${style ? `font-style="${style}"` : ''} fill="${fill}">${esc(ln)}</text>`).join('');
+  };
+  if (c.lay === 'full') {
+    s += photosSvg('card', x, y, w, h, forScreen, uid);
+    const bh = h * 0.34, by = y + h - bh;
+    s += `<rect x="${x}" y="${by}" width="${w}" height="${bh}" fill="${t.bg}" opacity=".9"/>` + decorations(x, by, w, bh, sc * 0.8);
+    const fs = fitFont(greet, w * 0.86, 40 * sc, t.script ? 0.5 : 0.52);
+    s += `<text x="${x + w / 2}" y="${by + bh * 0.45}" text-anchor="middle" font-size="${fs}" font-family="${gf}" font-weight="${t.script ? 400 : 700}" fill="${t.ink}">${esc(greet)}</text>`;
+    const sub = [c.sign, c.year ? cardYear() : ''].filter(Boolean).join(' · ');
+    s += `<text x="${x + w / 2}" y="${by + bh * 0.78}" text-anchor="middle" font-size="${13 * sc}" font-family="Georgia, serif" fill="${t.ink}">${esc(sub)}</text>`;
+  } else {
+    const pw = w * 0.56;
+    s += photosSvg('card', x, y, pw, h, forScreen, uid);
+    const tx = x + pw, tw = w - pw, cx = tx + tw / 2;
+    s += decorations(tx, y, tw, h, sc);
+    const fs = fitFont(greet, tw * 0.86 * 2.2, 34 * sc, t.script ? 0.5 : 0.52);
+    // greeting on up to two lines
+    const gw = greet.split(' '), half = Math.ceil(gw.length / 2);
+    const g1 = greet.length * fs * 0.5 > tw * 0.86 && gw.length > 1 ? [gw.slice(0, half).join(' '), gw.slice(half).join(' ')] : [greet];
+    const gfs = Math.min(fs, ...g1.map((g) => (tw * 0.86) / Math.max(1, g.length * 0.5)));
+    const top = y + h * 0.3 - (g1.length - 1) * gfs * 0.6;
+    g1.forEach((g, i) => { s += `<text x="${cx}" y="${top + i * gfs * 1.15}" text-anchor="middle" font-size="${gfs}" font-family="${gf}" font-weight="${t.script ? 400 : 700}" fill="${t.ink}">${esc(g)}</text>`; });
+    s += `<line x1="${cx - tw * 0.18}" y1="${y + h * 0.47}" x2="${cx + tw * 0.18}" y2="${y + h * 0.47}" stroke="${t.soft}" stroke-width="${1.2 * sc}"/>`;
+    s += lines(c.msg, cx, y + h * 0.58, tw * 0.8, 12.5 * sc, t.ink, 400, 'Georgia, serif', 'italic');
+    s += `<text x="${cx}" y="${y + h * 0.84}" text-anchor="middle" font-size="${fitFont(c.sign, tw * 0.86, 15 * sc, 0.5)}" font-family="${t.script ? scriptFont : 'Georgia, serif'}" fill="${t.ink}">${esc(c.sign)}</text>`;
+    if (c.year) s += `<text x="${cx}" y="${y + h * 0.92}" text-anchor="middle" font-size="${10 * sc}" letter-spacing="${2 * sc}" font-family="Georgia, serif" fill="${t.soft}">${cardYear()}</text>`;
+  }
+  return s;
+}
+const cardYear = () => String(new Date().getFullYear());
+function cutBox(x, y, w, h) { return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#9ca3af" stroke-width=".6" stroke-dasharray="4 3"/>`; }
+function cardPageSvg(forScreen) {
+  const [W, H] = pageSize(false), cw = 504, ch = 360, gap = 24, y0 = (H - ch * 2 - gap) / 2, x0 = (W - cw) / 2;
+  let body = `<rect width="${W}" height="${H}" fill="#fff"/>`;
+  for (let k = 0; k < 2; k++) { const yy = y0 + k * (ch + gap); body += cardSvg(x0, yy, cw, ch, forScreen && k === 0, 'c' + k) + cutBox(x0, yy, cw, ch); }
+  body += `<text x="${W / 2}" y="${H - 10}" text-anchor="middle" font-size="7" fill="#9ca3af">Two 7 × 5 in cards – cut along the dotted lines</text>`;
+  return { w: W, h: H, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="${fontFamily()}">${body}</svg>` };
+}
+const tagNames = () => String(cal.tags.to || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+const tagPages = () => Math.max(1, Math.ceil(tagNames().length / 8));
+function tagSvg(x, y, w, h, name) {
+  const t = theme(), sc = h / 162, n = 22 * sc;
+  const d = `M${x + n},${y} L${x + w},${y} L${x + w},${y + h} L${x + n},${y + h} L${x},${y + h - n} L${x},${y + n} Z`;
+  let s = `<path d="${d}" fill="${t.bg}" stroke="#9ca3af" stroke-width=".6" stroke-dasharray="4 3"/>`;
+  s += `<clipPath id="tg${Math.round(x)}_${Math.round(y)}"><path d="${d}"/></clipPath><g clip-path="url(#tg${Math.round(x)}_${Math.round(y)})">${decorations(x + w * 0.55, y, w * 0.45, h, sc * 0.8)}</g>`;
+  s += `<circle cx="${x + 20 * sc}" cy="${y + h / 2}" r="${6 * sc}" fill="#fff" stroke="${t.soft}" stroke-width="${1.2 * sc}"/>`;
+  const lx = x + 42 * sc, f = t.script ? scriptFont : 'Georgia, serif';
+  s += `<text x="${lx}" y="${y + 52 * sc}" font-size="${12 * sc}" font-family="Georgia, serif" fill="${t.soft}">To:</text>`;
+  if (name) s += `<text x="${lx + 26 * sc}" y="${y + 54 * sc}" font-size="${fitFont(name, w - 90 * sc, 24 * sc, 0.5)}" font-family="${f}" fill="${t.ink}">${esc(name)}</text>`;
+  else s += `<line x1="${lx + 26 * sc}" y1="${y + 55 * sc}" x2="${x + w - 20 * sc}" y2="${y + 55 * sc}" stroke="${t.soft}" stroke-width=".8" opacity=".6"/>`;
+  s += `<text x="${lx}" y="${y + 102 * sc}" font-size="${12 * sc}" font-family="Georgia, serif" fill="${t.soft}">From:</text>`;
+  if (cal.tags.from) s += `<text x="${lx + 38 * sc}" y="${y + 104 * sc}" font-size="${fitFont(cal.tags.from, w - 100 * sc, 18 * sc, 0.5)}" font-family="${f}" fill="${t.ink}">${esc(cal.tags.from)}</text>`;
+  else s += `<line x1="${lx + 38 * sc}" y1="${y + 105 * sc}" x2="${x + w - 20 * sc}" y2="${y + 105 * sc}" stroke="${t.soft}" stroke-width=".8" opacity=".6"/>`;
+  s += `<text x="${lx}" y="${y + h - 18 * sc}" font-size="${11 * sc}" font-family="${f}" fill="${t.ink}" opacity=".85">${esc(greetingText())}</text>`;
+  return s;
+}
+function tagPageSvg(pg) {
+  const [W, H] = pageSize(false), tw = 252, th = 162, gx = 24, gy = 20, x0 = (W - tw * 2 - gx) / 2, y0 = (H - th * 4 - gy * 3) / 2;
+  const names = tagNames();
+  let body = `<rect width="${W}" height="${H}" fill="#fff"/>`;
+  for (let k = 0; k < 8; k++) body += tagSvg(x0 + (k % 2) * (tw + gx), y0 + Math.floor(k / 2) * (th + gy), tw, th, names[pg * 8 + k] || '');
+  return { w: W, h: H, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="${fontFamily()}">${body}</svg>` };
+}
+let tagPage = 0;
+const isCal = () => (cal.make || 'calendar') === 'calendar';
+const photoKey = () => (cal.make === 'card' ? 'card' : slot(cur).m);
+function currentPage(forScreen) {
+  if (cal.make === 'card') return cardPageSvg(forScreen);
+  if (cal.make === 'tags') return tagPageSvg(Math.min(tagPage, tagPages() - 1));
+  return monthSvg(cur, forScreen);
+}
+function allPages() {
+  if (cal.make === 'card') return [cardPageSvg(false)];
+  if (cal.make === 'tags') return Array.from({ length: tagPages() }, (_, i) => tagPageSvg(i));
+  return Array.from({ length: 12 }, (_, i) => monthSvg(i, false));
+}
+
 // ---------- UI ----------
 let toastTimer = 0;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 4000); }
-function renderPage() { $('page').innerHTML = monthSvg(cur, true).svg; ensureAR(slot(cur).m); }
+function renderPage() { $('page').innerHTML = currentPage(true).svg; if (cal.make !== 'tags') ensureAR(photoKey()); }
 function renderMonths() {
   const el = $('months');
   el.textContent = '';
@@ -417,17 +551,19 @@ function renderControls() {
   const em = $('evMonth'), keep = em.value === '' ? String(slot(cur).m) : em.value;
   em.innerHTML = Array.from({ length: 12 }, (_, m) => `<option value="${m}">${esc(cap(monthName(m)))}</option>`).join('');
   em.value = keep;
-  const pm = slot(cur).m, n = nFrames(pm);
+  renderMake();
+  const pm = photoKey(), n = nFrames(pm);
   if (curFrame >= n) curFrame = 0;
-  const key = fkey(pm, curFrame), has = !!cal.photos[key], photoLayout = cal.layout === 'photo';
-  $('photoHead').textContent = n > 1 ? `Photos for ${cap(monthName(pm))}` : `Photo for ${cap(monthName(pm))}`;
+  const key = fkey(pm, curFrame), has = !!cal.photos[key], photoLayout = cal.make === 'card' || cal.layout === 'photo';
+  const what = cal.make === 'card' ? 'your card' : cap(monthName(pm));
+  $('photoHead').textContent = n > 1 ? `Photos for ${what}` : `Photo for ${what}`;
   $('collage').value = String(n); $('collageRow').hidden = !photoLayout;
   $('zoomRow').hidden = !has || !photoLayout;
   $('photoZoom').value = (cal.photoPos[key] || {}).z || 1;
   $('photoBtn').textContent = (has ? 'Change photo' : 'Add a photo') + (n > 1 ? ` ${curFrame + 1}` : '');
   $('photoBtn').disabled = !photoLayout;
   $('photoDel').hidden = !has;
-  $('photoHint').textContent = !photoLayout ? 'This page style has no photo.' : (n > 1 ? `Click a frame on the page to choose it (photo ${curFrame + 1} of ${n} is selected). ` : '') + (has ? 'Drag the photo to move it, and use Zoom to fill the frame.' : unlocked() ? 'Each month can have its own photos.' : `Free version: ${photoCount()} of ${FREE_PHOTOS} photos used.`);
+  $('photoHint').textContent = !photoLayout ? 'This page style has no photo.' : (n > 1 ? `Click a frame on the page to choose it (photo ${curFrame + 1} of ${n} is selected). ` : '') + (has ? 'Drag the photo to move it, and use Zoom to fill the frame.' : cal.make === 'card' ? 'A family photo works best.' : unlocked() ? 'Each month can have its own photos.' : `Free version: ${photoCount()} of ${FREE_PHOTOS} photos used.`);
 }
 function renderAll() { renderControls(); renderMonths(); renderEvents(); renderPage(); }
 
@@ -468,13 +604,14 @@ function printPages(pages) {
   window.print();
 }
 async function savePicture() {
-  const p = monthSvg(cur, false), img = new Image(), url = URL.createObjectURL(new Blob([p.svg], { type: 'image/svg+xml' }));
+  if (!themeOk()) return;
+  const p = currentPage(false), img = new Image(), url = URL.createObjectURL(new Blob([p.svg], { type: 'image/svg+xml' }));
   await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
   const c = document.createElement('canvas'), k = 3;
   c.width = p.w * k; c.height = p.h * k;
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   URL.revokeObjectURL(url);
-  c.toBlob((b) => download(b, `calendar-${slot(cur).y}-${String(slot(cur).m + 1).padStart(2, '0')}.png`), 'image/png');
+  c.toBlob((b) => download(b, cal.make === 'card' ? 'holiday-card.png' : cal.make === 'tags' ? `gift-tags-${tagPage + 1}.png` : `calendar-${slot(cur).y}-${String(slot(cur).m + 1).padStart(2, '0')}.png`), 'image/png');
 }
 function samplePhoto(m) { // a simple drawn landscape, so the sample works without any files
   const c = document.createElement('canvas'); c.width = 1200; c.height = 760;
@@ -512,8 +649,8 @@ $('holidays').innerHTML = HOLIDAY_SETS.map(([v, n]) => `<option value="${v}">${e
 $('holidays').onchange = (e) => { cal.holidays = e.target.value; if (cal.holidays === 'VN' && cal.locale === 'en-US') { cal.locale = 'vi'; cal.weekStart = 1; cal.lunar = true; toast('Lịch Việt Nam: tiếng Việt, tuần bắt đầu thứ Hai, có ngày âm lịch'); } renderAll(); save(); };
 $('lunar').onchange = (e) => { cal.lunar = e.target.checked; renderAll(); save(); };
 $('startMonth').onchange = (e) => { const old = slot(cur).m; cal.start = Number(e.target.value); cur = slotOf(old); renderAll(); save(); };
-$('photoZoom').addEventListener('input', (e) => { const k = fkey(slot(cur).m, curFrame); cal.photoPos[k] = Object.assign({}, cal.photoPos[k], { z: Number(e.target.value) }); renderPage(); save(); });
-$('collage').onchange = (e) => { cal.collage[slot(cur).m] = Number(e.target.value); curFrame = 0; renderAll(); save(); };
+$('photoZoom').addEventListener('input', (e) => { const k = fkey(photoKey(), curFrame); cal.photoPos[k] = Object.assign({}, cal.photoPos[k], { z: Number(e.target.value) }); renderPage(); save(); });
+$('collage').onchange = (e) => { cal.collage[photoKey()] = Number(e.target.value); curFrame = 0; renderAll(); save(); };
 // drag the photo inside its frame; click a frame to choose it; click an empty frame to add a photo
 let drag = null;
 $('page').addEventListener('pointerdown', (e) => {
@@ -551,14 +688,14 @@ $('page').addEventListener('wheel', (e) => {
   cal.photoPos[k] = Object.assign({}, p, { z }); $('photoZoom').value = z; renderPage(); save();
 }, { passive: false });
 $('year').addEventListener('change', () => { const y = parseInt($('year').value, 10); if (y >= 1900 && y <= 2200) cal.year = y; renderAll(); save(); });
-$('prev').onclick = () => { cur = (cur + 11) % 12; curFrame = 0; $('evMonth').value = ''; renderAll(); };
-$('next').onclick = () => { cur = (cur + 1) % 12; curFrame = 0; $('evMonth').value = ''; renderAll(); };
+$('prev').onclick = () => { if (cal.make === 'tags') { tagPage = (tagPage + tagPages() - 1) % tagPages(); renderAll(); return; } cur = (cur + 11) % 12; curFrame = 0; $('evMonth').value = ''; renderAll(); };
+$('next').onclick = () => { if (cal.make === 'tags') { tagPage = (tagPage + 1) % tagPages(); renderAll(); return; } cur = (cur + 1) % 12; curFrame = 0; $('evMonth').value = ''; renderAll(); };
 $('photoBtn').onclick = () => {
-  const k = fkey(slot(cur).m, curFrame);
-  if (!cal.photos[k] && photoCount() >= FREE_PHOTOS && needsPro(`The free version holds ${FREE_PHOTOS} photos. Unlock Pro to give every month its own photos.`)) return;
+  const k = fkey(photoKey(), curFrame);
+  if (!cal.photos[k] && cal.make !== 'card' && photoCount() >= FREE_PHOTOS && needsPro(`The free version holds ${FREE_PHOTOS} photos. Unlock Pro to give every month its own photos.`)) return;
   pickFile('image/*', async (f) => { const r = await shrinkPhoto(f); cal.photos[k] = r.url; cal.photoPos[k] = { ar: r.ar }; renderAll(); save(); });
 };
-$('photoDel').onclick = () => { const k = fkey(slot(cur).m, curFrame); delete cal.photos[k]; delete cal.photoPos[k]; renderAll(); save(); };
+$('photoDel').onclick = () => { const k = fkey(photoKey(), curFrame); delete cal.photos[k]; delete cal.photoPos[k]; renderAll(); save(); };
 $('evAdd').onclick = () => {
   const m = Number($('evMonth').value), d = parseInt($('evDay').value, 10), text = $('evText').value.trim();
   if (!(d >= 1 && d <= daysIn(2024, m))) { $('evDay').focus(); toast('Type the day of the month, for example 14'); return; }
@@ -569,8 +706,8 @@ $('evAdd').onclick = () => {
   $('evDay').focus();
 };
 $('evText').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('evAdd').click(); });
-$('printOne').onclick = () => printPages([monthSvg(cur, false)]);
-$('printAll').onclick = () => printPages(Array.from({ length: 12 }, (_, i) => monthSvg(i, false)));
+$('printOne').onclick = () => { if (!themeOk()) return; printPages([currentPage(false)]); };
+$('printAll').onclick = () => { if (!themeOk()) return; printPages(allPages()); };
 $('imgBtn').onclick = savePicture;
 // ---------- save the whole calendar as one PDF ----------
 const PAPER_MM = { letter: [215.9, 279.4], a4: [210, 297], a3: [297, 420], a5: [148, 210], tabloid: [279.4, 431.8] };
@@ -616,19 +753,63 @@ function svgToJpeg(page, pxPerMm) {
 let pdfBusy = false;
 async function savePdf() {
   if (pdfBusy) return;
-  if (needsPro('Saving the whole calendar as a PDF is part of Pro.')) return;
+  if (needsPro('Saving as a PDF is part of Pro.')) return;
+  if (!themeOk()) return;
   pdfBusy = true;
   try {
-    const pages = Array.from({ length: 12 }, (_, i) => monthSvg(i, false));
-    pages.push(yearSvg()); // the year planner as the last page
+    const pages = allPages();
+    if (isCal()) pages.push(yearSvg()); // the year planner as the last page
     const mm = PAPER_MM[cal.paper] || PAPER_MM.letter, px = Math.min(11.8, 4200 / Math.max(...mm)); // about 300 dpi, less for very large paper
     const out = [];
     for (let i = 0; i < pages.length; i++) { toast(`Making the PDF… page ${i + 1} of ${pages.length}`); out.push(await svgToJpeg(pages[i], px)); }
-    download(new Blob([jpegPdf(out)], { type: 'application/pdf' }), `calendar-${spanTitle()}.pdf`);
+    download(new Blob([jpegPdf(out)], { type: 'application/pdf' }), cal.make === 'card' ? 'holiday-cards.pdf' : cal.make === 'tags' ? 'gift-tags.pdf' : `calendar-${spanTitle()}.pdf`);
   } catch (e) { toast('The PDF could not be made: ' + e.message); }
   pdfBusy = false;
 }
 $('pdfBtn').onclick = savePdf;
+
+// ---------- cards & tags controls ----------
+function themeOk() { const t = theme(); return isCal() || !t.pro || !needsPro(`The ${t.name} design is part of Pro. Holly and Snowflakes are free.`); }
+function renderMake() {
+  const mk = cal.make || 'calendar';
+  $('makeSeg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === mk));
+  $('calOnly').hidden = mk !== 'calendar'; $('evBox').hidden = mk !== 'calendar';
+  $('cardBox').hidden = mk === 'calendar'; $('cardOnly').hidden = mk !== 'card'; $('tagOnly').hidden = mk !== 'tags';
+  $('photoBox').hidden = mk === 'tags';
+  $('months').hidden = mk !== 'calendar';
+  $('prev').hidden = $('next').hidden = mk === 'card' || (mk === 'tags' && tagPages() < 2);
+  $('printAll').textContent = mk === 'calendar' ? '🖨 Print all 12 months' : mk === 'card' ? '🖨 Print cards' : '🖨 Print all tags';
+  $('printOne').hidden = mk !== 'calendar';
+  if (mk !== 'calendar') $('headline').textContent = mk === 'card' ? 'Holiday photo card' : `Gift tags${tagPages() > 1 ? ` – sheet ${Math.min(tagPage, tagPages() - 1) + 1} of ${tagPages()}` : ''}`;
+  const c = cal.card;
+  $('cGreet').value = GREETINGS.includes(c.greet) ? c.greet : 'custom';
+  $('cCustomRow').hidden = $('cGreet').value !== 'custom';
+  if (document.activeElement !== $('cCustom')) $('cCustom').value = c.custom || '';
+  if (document.activeElement !== $('cMsg')) $('cMsg').value = c.msg || '';
+  if (document.activeElement !== $('cSign')) $('cSign').value = c.sign || '';
+  $('cYear').checked = !!c.year; $('cLay').value = c.lay;
+  $('cTheme').innerHTML = Object.entries(THEMES).map(([k, t]) => `<option value="${k}">${esc(t.name)}${t.pro && !unlocked() ? ' (Pro)' : ''}</option>`).join('');
+  $('cTheme').value = c.theme;
+  $('paper2').value = cal.paper === 'a4' ? 'a4' : 'letter';
+  if (document.activeElement !== $('tTo')) $('tTo').value = cal.tags.to || '';
+  if (document.activeElement !== $('tFrom')) $('tFrom').value = cal.tags.from || '';
+  const n = tagNames().length;
+  $('tCount').textContent = n ? `${n} tag${n > 1 ? 's' : ''} on ${tagPages()} sheet${tagPages() > 1 ? 's' : ''} (8 per sheet).` : 'Leave it empty to print blank tags you write on by hand.';
+}
+$('cGreet').innerHTML = GREETINGS.map((g) => `<option>${esc(g)}</option>`).join('') + '<option value="custom">My own words…</option>';
+$('makeSeg').querySelectorAll('button').forEach((b) => (b.onclick = () => { cal.make = b.dataset.v; curFrame = 0; tagPage = 0; renderAll(); save(); }));
+const cardSet = (fn) => { fn(); renderControls(); renderPage(); save(); };
+$('cGreet').onchange = (e) => cardSet(() => { cal.card.greet = e.target.value; });
+$('cCustom').addEventListener('input', (e) => cardSet(() => { cal.card.custom = e.target.value; }));
+$('cMsg').addEventListener('input', (e) => cardSet(() => { cal.card.msg = e.target.value; }));
+$('cSign').addEventListener('input', (e) => cardSet(() => { cal.card.sign = e.target.value; }));
+$('cYear').onchange = (e) => cardSet(() => { cal.card.year = e.target.checked; });
+$('cLay').onchange = (e) => cardSet(() => { cal.card.lay = e.target.value; });
+$('paper2').onchange = (e) => { cal.paper = e.target.value; renderAll(); save(); };
+$('cTheme').onchange = (e) => cardSet(() => { cal.card.theme = e.target.value; if (THEMES[cal.card.theme].pro && !unlocked()) toast('This design is part of Pro – you can try it here; printing it needs Pro.'); });
+$('tTo').addEventListener('input', (e) => cardSet(() => { cal.tags.to = e.target.value; if (tagPage >= tagPages()) tagPage = tagPages() - 1; }));
+$('tFrom').addEventListener('input', (e) => cardSet(() => { cal.tags.from = e.target.value; }));
+
 
 $('moreBtn').onclick = (e) => { e.stopPropagation(); $('menu').hidden = !$('menu').hidden; };
 document.addEventListener('click', () => { $('menu').hidden = true; });

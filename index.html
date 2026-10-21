@@ -23,7 +23,7 @@
       <button id="proBtn" class="pro-btn" hidden>★ Get Pro</button>
     </div>
     <div id="menu" class="menu" hidden>
-      <button id="pdfBtn">📄 Save the whole calendar as a PDF <span class="badge pro-only">PRO</span></button>
+      <button id="pdfBtn">📄 Save as a PDF <span class="badge pro-only">PRO</span></button>
       <button id="yearBtn">Print the whole year on one page <span class="badge pro-only">PRO</span></button>
       <button id="kinBtn">Add birthdays from a Kinleaf family tree backup…</button>
       <button id="backupBtn">Save a backup file</button>
@@ -40,6 +40,27 @@
 
   <main class="layout">
     <aside class="left">
+      <div class="field">What to make<div id="makeSeg" class="seg"><button data-v="calendar">📅 Calendar</button><button data-v="card">🎄 Card</button><button data-v="tags">🎁 Tags</button></div></div>
+      <div id="cardBox" hidden>
+        <h2>Words</h2>
+        <label class="field">Greeting<select id="cGreet"></select></label>
+        <label id="cCustomRow" class="field" hidden>Your greeting<input id="cCustom" type="text" maxlength="40" placeholder="e.g. Peace & Joy"></label>
+        <div id="cardOnly">
+          <label class="field">Message<textarea id="cMsg" rows="2" maxlength="140"></textarea></label>
+          <label class="field">Signed<input id="cSign" type="text" maxlength="50" placeholder="e.g. Love, The Carter Family"></label>
+          <label class="check"><input id="cYear" type="checkbox"> Show the year</label>
+          <label class="field">Layout<select id="cLay"><option value="left">Photo left, words right</option><option value="full">Big photo, words below</option></select></label>
+        </div>
+        <div id="tagOnly">
+          <label class="field">To – one name on each line<textarea id="tTo" rows="5" placeholder="Grandma Rose&#10;Uncle Tom&#10;Emma"></textarea></label>
+          <p id="tCount" class="hint"></p>
+          <label class="field">From<input id="tFrom" type="text" maxlength="40" placeholder="e.g. The Carters"></label>
+        </div>
+        <label class="field">Design<select id="cTheme"></select></label>
+        <label class="field">Paper<select id="paper2"><option value="letter">Letter (US)</option><option value="a4">A4</option></select></label>
+        <p class="hint">Print on thick paper or card stock and cut along the dotted lines.</p>
+      </div>
+      <div id="calOnly">
       <h2>Calendar</h2>
       <div class="two">
         <label class="field">Year<input id="year" type="text" inputmode="numeric" maxlength="4"></label>
@@ -60,6 +81,8 @@
       </div>
       <label class="field">Holidays &amp; special days<select id="holidays"></select></label>
       <label class="check"><input id="lunar" type="checkbox"> Show lunar dates (âm lịch / 农历)</label>
+      </div>
+      <div id="photoBox">
 
       <h2 id="photoHead">Photo</h2>
       <label id="collageRow" class="field">Photos on this page<select id="collage"><option value="1">One photo</option><option value="2">Two side by side</option><option value="3">One large + two small</option><option value="4">Four photos</option></select></label>
@@ -69,6 +92,8 @@
       </div>
       <label id="zoomRow" class="field" hidden>Zoom<input id="photoZoom" type="range" min="1" max="3" step="0.02" value="1"></label>
       <p id="photoHint" class="hint"></p>
+      </div>
+      <div id="evBox">
 
       <h2>Birthdays &amp; events</h2>
       <div class="three">
@@ -82,6 +107,7 @@
       </div>
       <ul id="events" class="events"></ul>
       <p id="countLine" class="hint"></p>
+      </div>
     </aside>
 
     <section class="stage">
@@ -102,6 +128,7 @@
       <li><strong>Unlimited birthdays and events</strong> <span class="muted">(Free: 12)</span></li>
       <li><strong>Whole year on one page</strong> – a wall planner to print</li>
       <li><strong>Save the whole calendar as a PDF</strong> – print it at a copy shop or send it to family</li>
+      <li><strong>All holiday card and gift tag designs</strong> <span class="muted">(Free: Holly and Snowflakes)</span></li>
     </ul>
     <p id="proMsg" class="pro-msg" hidden></p>
     <div class="row-btns">
