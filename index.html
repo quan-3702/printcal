@@ -40,15 +40,17 @@
 
   <main class="layout">
     <aside class="left">
-      <div class="field">What to make<div id="makeSeg" class="seg"><button data-v="calendar">📅 Calendar</button><button data-v="card">🎄 Card</button><button data-v="tags">🎁 Tags</button></div></div>
+      <div class="field">What to make<div id="makeSeg" class="seg"><button data-v="calendar">📅 Calendar</button><button data-v="card">💌 Card</button><button data-v="tags">🎁 Tags</button></div></div>
       <div id="cardBox" hidden>
         <h2>Words</h2>
+        <label id="cOccRow" class="field">Occasion<select id="cOcc"></select></label>
         <label class="field">Greeting<select id="cGreet"></select></label>
         <label id="cCustomRow" class="field" hidden>Your greeting<input id="cCustom" type="text" maxlength="40" placeholder="e.g. Peace & Joy"></label>
         <div id="cardOnly">
           <label class="field">Message<textarea id="cMsg" rows="2" maxlength="140"></textarea></label>
           <label class="field">Signed<input id="cSign" type="text" maxlength="50" placeholder="e.g. Love, The Carter Family"></label>
           <label class="check"><input id="cYear" type="checkbox"> Show the year</label>
+          <button id="photoPrintBtn" class="ghost" type="button" style="width:100%;margin:6px 0 10px">📷 Save for photo printing (5 × 7 in)</button>
           <label class="field">Layout<select id="cLay"><option value="left">Photo left, words right</option><option value="full">Big photo, words below</option></select></label>
         </div>
         <div id="tagOnly">
@@ -128,7 +130,8 @@
       <li><strong>Unlimited birthdays and events</strong> <span class="muted">(Free: 12)</span></li>
       <li><strong>Whole year on one page</strong> – a wall planner to print</li>
       <li><strong>Save the whole calendar as a PDF</strong> – print it at a copy shop or send it to family</li>
-      <li><strong>All holiday card and gift tag designs</strong> <span class="muted">(Free: Holly and Snowflakes)</span></li>
+      <li><strong>All card and gift tag designs</strong> for every occasion – birthdays, weddings, baby, graduation, Tết and more <span class="muted">(Free: 2 designs for each occasion)</span></li>
+      <li><strong>Order prints at a photo shop</strong> – save each card as a 5 × 7 in photo</li>
     </ul>
     <p id="proMsg" class="pro-msg" hidden></p>
     <div class="row-btns">

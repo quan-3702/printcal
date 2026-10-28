@@ -85,7 +85,7 @@ function needsPro(reason) {
 // ---------- data ----------
 const COLORS = ['#9f1239', '#1d4ed8', '#166534', '#b45309', '#6d28d9', '#0f766e', '#374151'];
 const defaultYear = () => { const d = new Date(); return d.getFullYear() + (d.getMonth() >= 8 ? 1 : 0); };
-const blank = () => ({ year: defaultYear(), start: 0, paper: 'letter', layout: 'photo', weekStart: 0, locale: 'en-US', font: 'sans', color: COLORS[0], holidays: 'US', lunar: false, events: [], photos: {}, photoPos: {}, collage: {}, make: 'calendar', card: { greet: 'Merry Christmas', custom: '', msg: 'Wishing you joy, peace and love this holiday season', sign: 'Love, The Carter Family', year: true, theme: 'holly', lay: 'left' }, tags: { to: '', from: '' } });
+const blank = () => ({ year: defaultYear(), start: 0, paper: 'letter', layout: 'photo', weekStart: 0, locale: 'en-US', font: 'sans', color: COLORS[0], holidays: 'US', lunar: false, events: [], photos: {}, photoPos: {}, collage: {}, make: 'calendar', card: { occ: 'christmas', greet: 'Merry Christmas', custom: '', msg: 'Wishing you joy, peace and love this holiday season', sign: 'Love, The Carter Family', year: true, theme: 'holly', lay: 'left' }, tags: { to: '', from: '' } });
 function upgrade(c) { // older saved calendars
   const o = Object.assign(blank(), c);
   if (c && c.holidays == null) o.holidays = c.usHolidays === false ? 'none' : 'US';
@@ -379,7 +379,22 @@ function yearSvg() {
 
 
 // ---------- holiday photo cards and gift tags ----------
-const GREETINGS = ['Merry Christmas', 'Happy Holidays', "Season's Greetings", 'Happy New Year', 'Merry Christmas & Happy New Year', 'Happy Hanukkah', 'Joyeux Noël', 'Feliz Navidad', 'Frohe Weihnachten', 'Buon Natale', 'Chúc mừng Giáng sinh', 'Chúc mừng năm mới'];
+const nextClass = () => { const d = new Date(); return d.getFullYear() + (d.getMonth() >= 6 ? 1 : 0); };
+const OCCASIONS = {
+  christmas: { name: 'Christmas & holidays', greets: ['Merry Christmas', 'Happy Holidays', "Season's Greetings", 'Happy New Year', 'Merry Christmas & Happy New Year', 'Happy Hanukkah', 'Joyeux Noël', 'Feliz Navidad', 'Frohe Weihnachten', 'Buon Natale', 'Chúc mừng Giáng sinh', 'Chúc mừng năm mới'], msg: 'Wishing you joy, peace and love this holiday season', themes: ['holly', 'snow', 'evergreen', 'gold', 'kraft', 'night'] },
+  birthday: { name: 'Birthday', greets: ['Happy Birthday', 'Happy 1st Birthday', 'Happy Birthday, Mom', 'Happy Birthday, Dad', 'Happy Birthday, Grandma', 'Happy Birthday, Grandpa', 'Feliz Cumpleaños', 'Joyeux Anniversaire', 'Chúc mừng sinh nhật'], msg: 'Wishing you a wonderful day and a year full of happy moments', themes: ['balloons', 'confetti', 'pastel', 'bnight'] },
+  thanks: { name: 'Thank you', greets: ['Thank You', 'Thank You So Much', 'With Gratitude', 'Thanks a Bunch', 'Gracias', 'Merci', 'Cảm ơn'], msg: 'Thank you for your kindness – it meant so much to us', themes: ['greenery', 'kthanks', 'navy'] },
+  wedding: { name: 'Wedding & anniversary', greets: ['Save the Date', 'Just Married', "We're Engaged!", 'Thank You', 'Happy Anniversary'], msg: 'Saturday, June 12 · Invitation to follow', themes: ['ivory', 'blush', 'eucalyptus', 'wgold'] },
+  baby: { name: 'New baby', greets: ["It's a Boy!", "It's a Girl!", 'Welcome, Little One', 'Hello, World', 'Baby Shower', 'Thank You'], msg: 'Born March 3 · 7 lb 2 oz · 20 in', themes: ['babyblue', 'babypink', 'sage'] },
+  grad: { name: 'Graduation', greets: () => ['Congratulations, Graduate!', `Class of ${nextClass()}`, 'Congrats, Grad!', 'So Proud of You', 'Graduation Party'], msg: 'Join us to celebrate on Saturday, June 5 at 4 pm', themes: ['gnavy', 'gblack', 'gmaroon'] },
+  tet: { name: 'Lunar New Year (Tết)', greets: ['Happy Lunar New Year', 'Chúc Mừng Năm Mới', 'An Khang Thịnh Vượng', 'Vạn Sự Như Ý', '新年快乐', 'Gong Xi Fa Cai'], msg: 'Wishing you health, happiness and good fortune in the new year', themes: ['tetred', 'mai', 'peach', 'tetgold'] },
+  valentine: { name: "Valentine's Day", greets: ["Happy Valentine's Day", 'Be Mine', 'Love You', 'XOXO', 'You & Me'], msg: 'You make every day brighter', themes: ['hearts', 'rose', 'lkraft'] },
+  parents: { name: "Mother's & Father's Day", greets: ["Happy Mother's Day", "Happy Father's Day", 'Best Mom Ever', 'Best Dad Ever', 'Love You, Mom', 'Love You, Dad'], msg: 'Thank you for everything you do', themes: ['floral', 'mclassic', 'mgold'] },
+  party: { name: 'Party invitation', greets: ["You're Invited!", 'Join the Party', "Let's Celebrate", 'Come Party With Us'], msg: 'Saturday, May 8 at 3 pm · 12 Oak Street · RSVP to Anna', themes: ['confetti', 'balloons', 'bnight'] },
+};
+const occ = () => OCCASIONS[cal.card.occ] || OCCASIONS.christmas;
+const occGreets = (o) => (typeof (o || occ()).greets === 'function' ? (o || occ()).greets() : (o || occ()).greets);
+const GREETINGS = OCCASIONS.christmas.greets;
 const THEMES = {
   holly: { name: 'Holly', bg: '#fbf7f0', ink: '#7f1d1d', soft: '#166534', deco: 'holly', script: true },
   snow: { name: 'Snowflakes', bg: '#eaf2fb', ink: '#1e3a8a', soft: '#3b82f6', deco: 'snow', script: false },
@@ -387,8 +402,35 @@ const THEMES = {
   gold: { name: 'Gold & white', bg: '#fffdf7', ink: '#854d0e', soft: '#ca8a04', deco: 'stars', script: true, pro: true },
   kraft: { name: 'Kraft paper', bg: '#d6b48a', ink: '#3f2a14', soft: '#7c2d12', deco: 'trees', script: true, pro: true },
   night: { name: 'Silent night', bg: '#0f172a', ink: '#f8fafc', soft: '#fde68a', deco: 'stars', script: false, pro: true },
+  balloons: { name: 'Balloons', bg: '#fff7ed', ink: '#1e3a8a', soft: '#f97316', deco: 'balloons', script: false },
+  confetti: { name: 'Confetti', bg: '#ffffff', ink: '#7c3aed', soft: '#ec4899', deco: 'confetti', script: false },
+  pastel: { name: 'Pastel', bg: '#fdf4ff', ink: '#6b21a8', soft: '#e879f9', deco: 'dots', script: true, pro: true },
+  bnight: { name: 'Party night', bg: '#111827', ink: '#fde68a', soft: '#f472b6', deco: 'confetti', script: false, pro: true },
+  greenery: { name: 'Greenery', bg: '#f7faf5', ink: '#14532d', soft: '#4d7c0f', deco: 'leaves', script: true },
+  kthanks: { name: 'Kraft', bg: '#d6b48a', ink: '#3f2a14', soft: '#365314', deco: 'leaves', script: true },
+  navy: { name: 'Navy & gold', bg: '#172554', ink: '#fef3c7', soft: '#fbbf24', deco: 'dots', script: true, pro: true },
+  ivory: { name: 'Ivory', bg: '#fffdf7', ink: '#57534e', soft: '#a8a29e', deco: 'leaves', script: true },
+  blush: { name: 'Blush', bg: '#fdf2f2', ink: '#9f1239', soft: '#f9a8d4', deco: 'flowers', script: true },
+  eucalyptus: { name: 'Eucalyptus', bg: '#f1f5f0', ink: '#365314', soft: '#84a98c', deco: 'leaves', script: true, pro: true },
+  wgold: { name: 'Black & gold', bg: '#1c1917', ink: '#fde68a', soft: '#d4a017', deco: 'stars', script: true, pro: true },
+  babyblue: { name: 'Baby blue', bg: '#eff6ff', ink: '#1e40af', soft: '#93c5fd', deco: 'dots', script: false },
+  babypink: { name: 'Baby pink', bg: '#fdf2f8', ink: '#be185d', soft: '#f9a8d4', deco: 'hearts', script: false },
+  sage: { name: 'Sage', bg: '#f0f5ee', ink: '#3f6212', soft: '#a3b18a', deco: 'stars', script: true, pro: true },
+  gnavy: { name: 'Navy', bg: '#1e3a8a', ink: '#ffffff', soft: '#fbbf24', deco: 'caps', script: false },
+  gblack: { name: 'Black & gold', bg: '#111827', ink: '#fde68a', soft: '#d4a017', deco: 'caps', script: false },
+  gmaroon: { name: 'Maroon', bg: '#7f1d1d', ink: '#ffffff', soft: '#fcd34d', deco: 'confetti', script: false, pro: true },
+  tetred: { name: 'Red & gold', bg: '#b91c1c', ink: '#fde68a', soft: '#facc15', deco: 'lanterns', script: false },
+  mai: { name: 'Apricot blossom (hoa mai)', bg: '#fffbeb', ink: '#b91c1c', soft: '#eab308', deco: 'blossom', script: false },
+  peach: { name: 'Peach blossom (hoa đào)', bg: '#fdf2f8', ink: '#9d174d', soft: '#ec4899', deco: 'blossom', script: false, pro: true },
+  tetgold: { name: 'Lucky gold', bg: '#7f1d1d', ink: '#fef3c7', soft: '#fbbf24', deco: 'lanterns', script: false, pro: true },
+  hearts: { name: 'Hearts', bg: '#fff1f2', ink: '#be123c', soft: '#fb7185', deco: 'hearts', script: true },
+  rose: { name: 'Red rose', bg: '#881337', ink: '#fff1f2', soft: '#fda4af', deco: 'hearts', script: true },
+  lkraft: { name: 'Kraft love', bg: '#d6b48a', ink: '#7f1d1d', soft: '#be123c', deco: 'hearts', script: true, pro: true },
+  floral: { name: 'Flowers', bg: '#fff7f5', ink: '#9d174d', soft: '#f472b6', deco: 'flowers', script: true },
+  mclassic: { name: 'Classic blue', bg: '#f8fafc', ink: '#1e3a8a', soft: '#60a5fa', deco: 'leaves', script: false },
+  mgold: { name: 'Golden', bg: '#fffbeb', ink: '#92400e', soft: '#f59e0b', deco: 'flowers', script: true, pro: true },
 };
-const theme = () => THEMES[cal.card.theme] || THEMES.holly;
+const theme = () => THEMES[occ().themes.includes(cal.card.theme) ? cal.card.theme : occ().themes[0]];
 const scriptFont = "'Segoe Script', 'Brush Script MT', 'Lucida Handwriting', Georgia, cursive";
 function snowflake(x, y, r, c, o) {
   let s = `<g transform="translate(${x},${y})" stroke="${c}" stroke-width="${Math.max(1, r / 9)}" stroke-linecap="round" opacity="${o}">`;
@@ -413,12 +455,29 @@ function decorations(x, y, w, h, scale) {
   const t = theme(); let s = '', seed = 7;
   const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
   const ry = () => (rnd() < 0.55 ? y + rnd() * h * 0.2 : y + h * 0.8 + rnd() * h * 0.18); // keep the middle free for the words
+  const edge = () => (rnd() < 0.6 ? [x + rnd() * w, y + rnd() * h * 0.17] : [rnd() < 0.5 ? x + rnd() * w * 0.09 : x + w * 0.91 + rnd() * w * 0.09, y + rnd() * h]); // only the top band and the side edges, away from all the words
   if (t.deco === 'holly') { s += holly(x + w - 26 * scale, y + 26 * scale, 26 * scale, 20) + holly(x + 24 * scale, y + h - 22 * scale, 20 * scale, 200); }
   else if (t.deco === 'snow') { for (let k = 0; k < 9; k++) s += snowflake(x + rnd() * w, ry(), (6 + rnd() * 10) * scale, t.soft, 0.18 + rnd() * 0.25); }
   else if (t.deco === 'stars') { for (let k = 0; k < 10; k++) s += star(x + rnd() * w, ry(), (3 + rnd() * 6) * scale, t.soft, 0.35 + rnd() * 0.5); }
   else if (t.deco === 'trees') { for (let k = 0; k < 4; k++) s += tree(x + w * (0.12 + k * 0.25), y + h - 6 * scale, (16 + (k % 2) * 8) * scale, t.soft, 0.55); }
+  else if (t.deco === 'hearts') { for (let k = 0; k < 9; k++) { const [hx, hy] = edge(); s += heart(hx, hy, (4 + rnd() * 6) * scale, k % 3 ? t.soft : t.ink, 0.3 + rnd() * 0.4); } }
+  else if (t.deco === 'confetti') { const cols = ['#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#a855f7', t.soft]; for (let k = 0; k < 22; k++) { const [cx, cy] = edge(), c = cols[k % cols.length], r = (2 + rnd() * 3) * scale; s += k % 2 ? `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${c}" opacity=".85"/>` : `<rect x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" width="${(r * 2.6).toFixed(1)}" height="${(r * 1.1).toFixed(1)}" fill="${c}" opacity=".85" transform="rotate(${Math.round(rnd() * 180)} ${cx.toFixed(1)} ${cy.toFixed(1)})"/>`; } }
+  else if (t.deco === 'balloons') { const cols = ['#ef4444', '#3b82f6', '#f59e0b', '#10b981']; s += balloon(x + w - 30 * scale, y + 20 * scale, 11 * scale, cols[0]) + balloon(x + w - 50 * scale, y + 27 * scale, 9 * scale, cols[1]) + balloon(x + w - 13 * scale, y + 31 * scale, 8 * scale, cols[2]) + balloon(x + 18 * scale, y + h - 48 * scale, 9 * scale, cols[3]); }
+  else if (t.deco === 'dots') { for (let k = 0; k < 16; k++) { const [dx, dy] = edge(); s += `<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="${((2 + rnd() * 4) * scale).toFixed(1)}" fill="${t.soft}" opacity="${(0.3 + rnd() * 0.4).toFixed(2)}"/>`; } }
+  else if (t.deco === 'flowers') { s += flower(x + w - 26 * scale, y + 26 * scale, 14 * scale, t.soft) + flower(x + w - 50 * scale, y + 16 * scale, 8 * scale, t.soft) + flower(x + 24 * scale, y + h - 24 * scale, 11 * scale, t.soft); }
+  else if (t.deco === 'leaves') { s += sprig(x + w - 4 * scale, y + 4 * scale, 52 * scale, 45, t.soft) + sprig(x + w - 4 * scale, y + 4 * scale, 34 * scale, 75, t.soft) + sprig(x + 4 * scale, y + h - 4 * scale, 44 * scale, 225, t.soft); }
+  else if (t.deco === 'blossom') { s += branch(x + w, y, 70 * scale, t.soft, t.deco === 'blossom' && t.bg === '#fdf2f8' ? '#f9a8d4' : '#facc15') + branch(x, y + h, 50 * scale, t.soft, t.bg === '#fdf2f8' ? '#f9a8d4' : '#facc15', true); }
+  else if (t.deco === 'lanterns') { s += lantern(x + w - 22 * scale, y, 12 * scale, t.soft) + lantern(x + w - 48 * scale, y, 8 * scale, t.soft) + lantern(x + 18 * scale, y, 9 * scale, t.soft); }
+  else if (t.deco === 'caps') { s += gradCap(x + w - 32 * scale, y + 26 * scale, 18 * scale, t.soft, -12) + gradCap(x + 26 * scale, y + h - 26 * scale, 13 * scale, t.soft, 14); for (let k = 0; k < 6; k++) { const [sx, sy] = edge(); s += star(sx, sy, (2 + rnd() * 3) * scale, t.soft, 0.5); } }
   return s;
 }
+function heart(x, y, r, c, o) { return `<path transform="translate(${x.toFixed(1)},${y.toFixed(1)})" d="M0,${(r * 0.35).toFixed(1)} C${(-r * 1.2).toFixed(1)},${(-r * 0.4).toFixed(1)} ${(-r * 0.5).toFixed(1)},${(-r * 1.2).toFixed(1)} 0,${(-r * 0.45).toFixed(1)} C${(r * 0.5).toFixed(1)},${(-r * 1.2).toFixed(1)} ${(r * 1.2).toFixed(1)},${(-r * 0.4).toFixed(1)} 0,${(r * 0.35).toFixed(1)}Z" fill="${c}" opacity="${o}"/>`; }
+function balloon(x, y, r, c) { return `<path d="M${x},${y + r * 1.25} q${-r * 0.4},${r * 0.8} ${r * 0.1},${r * 1.7}" stroke="#94a3b8" stroke-width="${r * 0.07}" fill="none"/><ellipse cx="${x}" cy="${y}" rx="${r}" ry="${r * 1.22}" fill="${c}"/><path d="M${x - r * 0.18},${y + r * 1.32} L${x + r * 0.18},${y + r * 1.32} L${x},${y + r * 1.15}Z" fill="${c}"/><ellipse cx="${x - r * 0.35}" cy="${y - r * 0.45}" rx="${r * 0.2}" ry="${r * 0.32}" fill="#fff" opacity=".45"/>`; }
+function flower(x, y, r, c) { let s = `<g transform="translate(${x},${y})">`; for (let k = 0; k < 5; k++) { const a = k * 72 * Math.PI / 180; s += `<circle cx="${(Math.cos(a) * r * 0.55).toFixed(1)}" cy="${(Math.sin(a) * r * 0.55).toFixed(1)}" r="${(r * 0.45).toFixed(1)}" fill="${c}" opacity=".8"/>`; } return s + `<circle r="${(r * 0.28).toFixed(1)}" fill="#fde68a"/></g>`; }
+function sprig(x, y, len, rot, c) { let s = `<g transform="translate(${x},${y}) rotate(${rot})"><path d="M0,0 Q${len * 0.1},${len * 0.5} 0,${len}" stroke="${c}" stroke-width="${len * 0.025}" fill="none"/>`; for (let k = 1; k <= 5; k++) { const yy = len * k / 6, side = k % 2 ? 1 : -1; s += `<ellipse cx="${side * len * 0.12}" cy="${yy}" rx="${len * 0.11}" ry="${len * 0.05}" transform="rotate(${side * 35} ${side * len * 0.12} ${yy})" fill="${c}" opacity=".8"/>`; } return s + '</g>'; }
+function branch(x, y, len, c, petal, flip) { const dx = flip ? 1 : -1, dy = flip ? -1 : 1; let s = `<path d="M${x},${y} q${dx * len * 0.5},${dy * len * 0.1} ${dx * len},${dy * len * 0.55}" stroke="#78350f" stroke-width="${len * 0.035}" fill="none" stroke-linecap="round"/>`; for (let k = 1; k <= 4; k++) { const f = k / 4.5; s += flower(x + dx * len * f, y + dy * len * (0.05 + f * f * 0.5), len * (0.1 + (k % 2) * 0.04), petal); } return s; }
+function lantern(x, y, r, c) { const top = y + r * 1.2; return `<line x1="${x}" y1="${y}" x2="${x}" y2="${top}" stroke="${c}" stroke-width="${r * 0.08}"/><rect x="${x - r * 0.45}" y="${top}" width="${r * 0.9}" height="${r * 0.22}" fill="${c}"/><ellipse cx="${x}" cy="${top + r * 1.15}" rx="${r}" ry="${r * 0.95}" fill="#dc2626" stroke="${c}" stroke-width="${r * 0.08}"/><path d="M${x},${top + r * 0.22} V${top + r * 2.1}" stroke="${c}" stroke-width="${r * 0.05}" opacity=".7"/><rect x="${x - r * 0.45}" y="${top + r * 2.05}" width="${r * 0.9}" height="${r * 0.22}" fill="${c}"/><path d="M${x},${top + r * 2.27} v${r * 0.8}" stroke="${c}" stroke-width="${r * 0.18}"/>`; }
+function gradCap(x, y, r, c, rot) { return `<g transform="translate(${x},${y}) rotate(${rot})"><path d="M${-r},0 L0,${-r * 0.45} L${r},0 L0,${r * 0.45}Z" fill="${c}"/><path d="M${-r * 0.55},${r * 0.22} v${r * 0.45} q${r * 0.55},${r * 0.35} ${r * 1.1},0 v${-r * 0.45}" fill="${c}" opacity=".85"/><path d="M0,0 L${r * 0.85},${r * 0.15} v${r * 0.6}" stroke="${c}" stroke-width="${r * 0.07}" fill="none"/><circle cx="${r * 0.85}" cy="${r * 0.8}" r="${r * 0.09}" fill="${c}"/></g>`; }
 function fitFont(text, maxW, base, ratio) { return Math.min(base, maxW / Math.max(1, String(text).length * ratio)); }
 const greetingText = () => (cal.card.greet === 'custom' ? cal.card.custom : cal.card.greet) || '';
 function cardSvg(x, y, w, h, forScreen, uid) {
@@ -436,7 +495,7 @@ function cardSvg(x, y, w, h, forScreen, uid) {
   if (c.lay === 'full') {
     s += photosSvg('card', x, y, w, h, forScreen, uid);
     const bh = h * 0.34, by = y + h - bh;
-    s += `<rect x="${x}" y="${by}" width="${w}" height="${bh}" fill="${t.bg}" opacity=".9"/>` + decorations(x, by, w, bh, sc * 0.8);
+    s += `<rect x="${x}" y="${by}" width="${w}" height="${bh}" fill="${t.bg}" opacity=".9"/><clipPath id="dc${uid}"><rect x="${x}" y="${by}" width="${w}" height="${bh}"/></clipPath><g clip-path="url(#dc${uid})">${decorations(x, by, w, bh, sc * 0.8)}</g>`;
     const fs = fitFont(greet, w * 0.86, 40 * sc, t.script ? 0.5 : 0.52);
     s += `<text x="${x + w / 2}" y="${by + bh * 0.45}" text-anchor="middle" font-size="${fs}" font-family="${gf}" font-weight="${t.script ? 400 : 700}" fill="${t.ink}">${esc(greet)}</text>`;
     const sub = [c.sign, c.year ? cardYear() : ''].filter(Boolean).join(' · ');
@@ -445,7 +504,7 @@ function cardSvg(x, y, w, h, forScreen, uid) {
     const pw = w * 0.56;
     s += photosSvg('card', x, y, pw, h, forScreen, uid);
     const tx = x + pw, tw = w - pw, cx = tx + tw / 2;
-    s += decorations(tx, y, tw, h, sc);
+    s += `<clipPath id="dc${uid}"><rect x="${tx}" y="${y}" width="${tw}" height="${h}"/></clipPath><g clip-path="url(#dc${uid})">${decorations(tx, y, tw, h, sc)}</g>`;
     const fs = fitFont(greet, tw * 0.86 * 2.2, 34 * sc, t.script ? 0.5 : 0.52);
     // greeting on up to two lines
     const gw = greet.split(' '), half = Math.ceil(gw.length / 2);
@@ -603,6 +662,17 @@ function printPages(pages) {
   $('printArea').innerHTML = pages.map((p) => p.svg.replace(/ width="[\d.]+" height="[\d.]+"/, ' preserveAspectRatio="xMidYMid meet"')).join('');
   window.print();
 }
+async function savePhotoPrint() { // one card as a 5 × 7 in JPEG at 300 dpi, ready for a photo shop or an online print service
+  if (!themeOk()) return;
+  if (needsPro('Saving cards for a photo shop (5 × 7 in prints) is part of Pro. You can still print them at home for free.')) return;
+  const W = 504, H = 360, svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="${fontFamily()}">${cardSvg(0, 0, W, H, false, 'pp')}</svg>`;
+  const img = new Image(), url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+  const c = document.createElement('canvas'); c.width = 2100; c.height = 1500;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+  URL.revokeObjectURL(url);
+  c.toBlob((b) => { download(b, `${cal.card.occ || 'holiday'}-card-5x7.jpg`); toast('Saved a 5 × 7 in photo (2100 × 1500 px). Upload it to Walmart, CVS, Walgreens or any photo shop and order 5 × 7 prints.'); }, 'image/jpeg', 0.95);
+}
 async function savePicture() {
   if (!themeOk()) return;
   const p = currentPage(false), img = new Image(), url = URL.createObjectURL(new Blob([p.svg], { type: 'image/svg+xml' }));
@@ -611,7 +681,7 @@ async function savePicture() {
   c.width = p.w * k; c.height = p.h * k;
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   URL.revokeObjectURL(url);
-  c.toBlob((b) => download(b, cal.make === 'card' ? 'holiday-card.png' : cal.make === 'tags' ? `gift-tags-${tagPage + 1}.png` : `calendar-${slot(cur).y}-${String(slot(cur).m + 1).padStart(2, '0')}.png`), 'image/png');
+  c.toBlob((b) => download(b, cal.make === 'card' ? `${cal.card.occ || 'holiday'}-card.png` : cal.make === 'tags' ? `gift-tags-${tagPage + 1}.png` : `calendar-${slot(cur).y}-${String(slot(cur).m + 1).padStart(2, '0')}.png`), 'image/png');
 }
 function samplePhoto(m) { // a simple drawn landscape, so the sample works without any files
   const c = document.createElement('canvas'); c.width = 1200; c.height = 760;
@@ -709,6 +779,7 @@ $('evText').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('evAdd
 $('printOne').onclick = () => { if (!themeOk()) return; printPages([currentPage(false)]); };
 $('printAll').onclick = () => { if (!themeOk()) return; printPages(allPages()); };
 $('imgBtn').onclick = savePicture;
+$('photoPrintBtn').onclick = savePhotoPrint;
 // ---------- save the whole calendar as one PDF ----------
 const PAPER_MM = { letter: [215.9, 279.4], a4: [210, 297], a3: [297, 420], a5: [148, 210], tabloid: [279.4, 431.8] };
 function jpegPdf(pages) { // pages: [{ jpeg: Uint8Array, px: [w, h], mm: [w, h] }]
@@ -769,7 +840,7 @@ async function savePdf() {
 $('pdfBtn').onclick = savePdf;
 
 // ---------- cards & tags controls ----------
-function themeOk() { const t = theme(); return isCal() || !t.pro || !needsPro(`The ${t.name} design is part of Pro. Holly and Snowflakes are free.`); }
+function themeOk() { const t = theme(); const free = occ().themes.filter((k) => !THEMES[k].pro).map((k) => THEMES[k].name).join(' and '); return isCal() || !t.pro || !needsPro(`The ${t.name} design is part of Pro. ${free} ${free.includes(' and ') ? 'are' : 'is'} free.`); }
 function renderMake() {
   const mk = cal.make || 'calendar';
   $('makeSeg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === mk));
@@ -780,23 +851,33 @@ function renderMake() {
   $('prev').hidden = $('next').hidden = mk === 'card' || (mk === 'tags' && tagPages() < 2);
   $('printAll').textContent = mk === 'calendar' ? '🖨 Print all 12 months' : mk === 'card' ? '🖨 Print cards' : '🖨 Print all tags';
   $('printOne').hidden = mk !== 'calendar';
-  if (mk !== 'calendar') $('headline').textContent = mk === 'card' ? 'Holiday photo card' : `Gift tags${tagPages() > 1 ? ` – sheet ${Math.min(tagPage, tagPages() - 1) + 1} of ${tagPages()}` : ''}`;
+  if (mk !== 'calendar') $('headline').textContent = mk === 'card' ? `${occ().name} photo card` : `Gift tags${tagPages() > 1 ? ` – sheet ${Math.min(tagPage, tagPages() - 1) + 1} of ${tagPages()}` : ''}`;
   const c = cal.card;
-  $('cGreet').value = GREETINGS.includes(c.greet) ? c.greet : 'custom';
+  $('cOcc').value = OCCASIONS[c.occ] ? c.occ : 'christmas';
+  const gl = occGreets();
+  $('cGreet').innerHTML = gl.map((g) => `<option>${esc(g)}</option>`).join('') + '<option value="custom">My own words…</option>';
+  $('cGreet').value = gl.includes(c.greet) ? c.greet : 'custom';
   $('cCustomRow').hidden = $('cGreet').value !== 'custom';
   if (document.activeElement !== $('cCustom')) $('cCustom').value = c.custom || '';
   if (document.activeElement !== $('cMsg')) $('cMsg').value = c.msg || '';
   if (document.activeElement !== $('cSign')) $('cSign').value = c.sign || '';
   $('cYear').checked = !!c.year; $('cLay').value = c.lay;
-  $('cTheme').innerHTML = Object.entries(THEMES).map(([k, t]) => `<option value="${k}">${esc(t.name)}${t.pro && !unlocked() ? ' (Pro)' : ''}</option>`).join('');
-  $('cTheme').value = c.theme;
+  $('cTheme').innerHTML = occ().themes.map((k) => [k, THEMES[k]]).map(([k, t]) => `<option value="${k}">${esc(t.name)}${t.pro && !unlocked() ? ' (Pro)' : ''}</option>`).join('');
+  $('cTheme').value = occ().themes.includes(c.theme) ? c.theme : occ().themes[0];
   $('paper2').value = cal.paper === 'a4' ? 'a4' : 'letter';
   if (document.activeElement !== $('tTo')) $('tTo').value = cal.tags.to || '';
   if (document.activeElement !== $('tFrom')) $('tFrom').value = cal.tags.from || '';
   const n = tagNames().length;
   $('tCount').textContent = n ? `${n} tag${n > 1 ? 's' : ''} on ${tagPages()} sheet${tagPages() > 1 ? 's' : ''} (8 per sheet).` : 'Leave it empty to print blank tags you write on by hand.';
 }
-$('cGreet').innerHTML = GREETINGS.map((g) => `<option>${esc(g)}</option>`).join('') + '<option value="custom">My own words…</option>';
+$('cOcc').innerHTML = Object.entries(OCCASIONS).map(([k, o]) => `<option value="${k}">${esc(o.name)}</option>`).join('');
+const DEFAULT_MSGS = Object.values(OCCASIONS).map((o) => o.msg);
+$('cOcc').onchange = (e) => cardSet(() => {
+  const c = cal.card, was = occ(); c.occ = e.target.value; const o = occ();
+  if (c.greet === 'custom' ? !c.custom : occGreets(was).includes(c.greet)) c.greet = occGreets(o)[0];
+  if (!c.msg || DEFAULT_MSGS.includes(c.msg)) c.msg = o.msg;
+  c.theme = o.themes[0];
+});
 $('makeSeg').querySelectorAll('button').forEach((b) => (b.onclick = () => { cal.make = b.dataset.v; curFrame = 0; tagPage = 0; renderAll(); save(); }));
 const cardSet = (fn) => { fn(); renderControls(); renderPage(); save(); };
 $('cGreet').onchange = (e) => cardSet(() => { cal.card.greet = e.target.value; });
