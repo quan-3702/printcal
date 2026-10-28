@@ -338,7 +338,7 @@ function photosSvg(m, x, y, w, h, forScreen, uid) {
   return s;
 }
 function landscapePic(m, x, y, w, h) { // placeholder shown (and printed) when a month has no photo
-  if (m === 'card') { const t = theme(); return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${t.soft}" opacity=".25"/>` + decorations(x, y, w, h, h / 300) + `<text x="${x + w / 2}" y="${y + h / 2 + 6}" text-anchor="middle" font-size="${h / 18}" fill="${t.ink}" opacity=".75">Your photo here</text>`; }
+  if (m === 'card') { const t = theme(); return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${t.soft}" opacity=".25"/><clipPath id="ph${Math.round(x)}_${Math.round(y)}"><rect x="${x}" y="${y}" width="${w}" height="${h}"/></clipPath><g clip-path="url(#ph${Math.round(x)}_${Math.round(y)})">${decorations(x, y, w, h, h / 300)}</g><text x="${x + w / 2}" y="${y + h / 2 + 6}" text-anchor="middle" font-size="${h / 18}" fill="${t.ink}" opacity=".75">Your photo here</text>`; }
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${cal.color}"/><text x="${x + w / 2}" y="${y + h / 2 + 22}" text-anchor="middle" font-size="64" font-weight="700" fill="#fff" opacity=".92">${esc(cap(monthName(m)))}</text>`;
 }
 const fontFamily = () => (cal.font === 'serif' ? 'Georgia, Cambria, serif' : 'Segoe UI, system-ui, sans-serif');
@@ -496,7 +496,7 @@ function cardSvg(x, y, w, h, forScreen, uid) {
     s += photosSvg('card', x, y, w, h, forScreen, uid);
     const bh = h * 0.34, by = y + h - bh;
     s += `<rect x="${x}" y="${by}" width="${w}" height="${bh}" fill="${t.bg}" opacity=".9"/><clipPath id="dc${uid}"><rect x="${x}" y="${by}" width="${w}" height="${bh}"/></clipPath><g clip-path="url(#dc${uid})">${decorations(x, by, w, bh, sc * 0.8)}</g>`;
-    const fs = fitFont(greet, w * 0.86, 40 * sc, t.script ? 0.5 : 0.52);
+    const fs = fitFont(greet, w * 0.86, 40 * sc, t.script ? 0.5 : 0.62);
     s += `<text x="${x + w / 2}" y="${by + bh * 0.45}" text-anchor="middle" font-size="${fs}" font-family="${gf}" font-weight="${t.script ? 400 : 700}" fill="${t.ink}">${esc(greet)}</text>`;
     const sub = [c.sign, c.year ? cardYear() : ''].filter(Boolean).join(' · ');
     s += `<text x="${x + w / 2}" y="${by + bh * 0.78}" text-anchor="middle" font-size="${13 * sc}" font-family="Georgia, serif" fill="${t.ink}">${esc(sub)}</text>`;
@@ -505,11 +505,12 @@ function cardSvg(x, y, w, h, forScreen, uid) {
     s += photosSvg('card', x, y, pw, h, forScreen, uid);
     const tx = x + pw, tw = w - pw, cx = tx + tw / 2;
     s += `<clipPath id="dc${uid}"><rect x="${tx}" y="${y}" width="${tw}" height="${h}"/></clipPath><g clip-path="url(#dc${uid})">${decorations(tx, y, tw, h, sc)}</g>`;
-    const fs = fitFont(greet, tw * 0.86 * 2.2, 34 * sc, t.script ? 0.5 : 0.52);
+    const cr = t.script ? 0.5 : 0.62; // bold Georgia is wider than the script fonts
+    const fs = fitFont(greet, tw * 0.86 * 2.2, 34 * sc, cr);
     // greeting on up to two lines
     const gw = greet.split(' '), half = Math.ceil(gw.length / 2);
-    const g1 = greet.length * fs * 0.5 > tw * 0.86 && gw.length > 1 ? [gw.slice(0, half).join(' '), gw.slice(half).join(' ')] : [greet];
-    const gfs = Math.min(fs, ...g1.map((g) => (tw * 0.86) / Math.max(1, g.length * 0.5)));
+    const g1 = greet.length * fs * cr > tw * 0.86 && gw.length > 1 ? [gw.slice(0, half).join(' '), gw.slice(half).join(' ')] : [greet];
+    const gfs = Math.min(fs, ...g1.map((g) => (tw * 0.86) / Math.max(1, g.length * cr)));
     const top = y + h * 0.3 - (g1.length - 1) * gfs * 0.6;
     g1.forEach((g, i) => { s += `<text x="${cx}" y="${top + i * gfs * 1.15}" text-anchor="middle" font-size="${gfs}" font-family="${gf}" font-weight="${t.script ? 400 : 700}" fill="${t.ink}">${esc(g)}</text>`; });
     s += `<line x1="${cx - tw * 0.18}" y1="${y + h * 0.47}" x2="${cx + tw * 0.18}" y2="${y + h * 0.47}" stroke="${t.soft}" stroke-width="${1.2 * sc}"/>`;
