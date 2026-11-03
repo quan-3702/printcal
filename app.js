@@ -10,6 +10,7 @@ const PRO_SKU = 'printcal_pro';
 const PRO_IDS = [PRO_SKU];
 let STORE_URL = 'https://apps.microsoft.com/detail/9MWSF3JMP1GJ';
 let proAvailable = false; // Pro limits apply only when the Store actually sells the add-on
+try { if ('getDigitalGoodsService' in window && localStorage.getItem('printcal-proavail') === '1') proAvailable = true; } catch (_) {} // keep Pro limits when offline
 let proSku = PRO_SKU;
 let isPro = false;
 try { isPro = localStorage.getItem('printcal-pro') === '1'; } catch (_) {}
@@ -29,17 +30,26 @@ function setPro(v) {
   document.body.classList.toggle('unlocked', unlocked());
   if (typeof renderAll === 'function') renderAll();
 }
+async function checkProAfterBuy() {
+  for (let i = 0; i < 6; i++) {
+    if (await checkPro()) return true;
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  proMessage('Thank you! If Pro is not unlocked within a minute, click “Restore purchase”.');
+  return false;
+}
 async function checkPro() {
   const svc = await billing();
   if (!svc) return false;
   try {
     const details = await svc.getDetails(PRO_IDS).catch(() => []);
-    proAvailable = details.length > 0;
+    if (details.length) { proAvailable = true; try { localStorage.setItem('printcal-proavail', '1'); } catch (_) {} }
     if (details[0]) { proSku = details[0].itemId; if (!PRO_IDS.includes(proSku)) PRO_IDS.push(proSku); }
     const list = await svc.listPurchases();
     const owned = list.some((p) => PRO_IDS.includes(p.itemId));
-    setPro(owned);
-    return owned;
+    if (owned || details.length) { setPro(owned); return owned; }
+    setPro(isPro); // Store did not answer (offline): keep what we knew
+    return isPro;
   } catch (_) { return isPro; }
 }
 function proMessage(text) { const m = $('proMsg'); m.hidden = !text; m.textContent = text || ''; }
@@ -74,7 +84,7 @@ async function buyPro() {
     proMessage('Purchase could not be completed: ' + (e.message || e));
     return;
   }
-  if (await checkPro()) { proMessage('Thank you! Pro is unlocked. ★'); setTimeout(() => $('proDialog').close(), 1500); }
+  if (await checkProAfterBuy()) { proMessage('Thank you! Pro is unlocked. ★'); setTimeout(() => $('proDialog').close(), 1500); }
 }
 function needsPro(reason) {
   if (unlocked()) return false;
@@ -91,6 +101,7 @@ function upgrade(c) { // older saved calendars
   if (c && c.holidays == null) o.holidays = c.usHolidays === false ? 'none' : 'US';
   if (!o.photoPos) o.photoPos = {};
   if (!o.collage) o.collage = {};
+  if (!/^#[0-9a-f]{6}$/i.test(o.color)) o.color = COLORS[0]; // a hand-edited backup must not break the drawing
   o.card = Object.assign(blank().card, c && c.card); o.tags = Object.assign(blank().tags, c && c.tags);
   delete o.usHolidays;
   return o;
@@ -321,13 +332,13 @@ function frames(n, x, y, w, h) {
 function photosSvg(m, x, y, w, h, forScreen, uid) {
   uid = uid || '';
   const n = nFrames(m);
-  if (n === 1 && !cal.photos[fkey(m, 0)]) return landscapePic(m, x, y, w, h) + (forScreen ? `<rect class="photoAdd" data-j="0" x="${x}" y="${y}" width="${w}" height="${h}" fill="transparent" style="cursor:pointer"/><text x="${x + w / 2}" y="${y + h - 24}" text-anchor="middle" font-size="13" fill="#fff" opacity=".9" pointer-events="none">Click here or use the button on the left to add a photo</text>` : '');
+  if (n === 1 && !cal.photos[fkey(m, 0)]) return landscapePic(m, x, y, w, h) + (forScreen ? `<rect class="photoAdd" data-j="0" x="${x}" y="${y}" width="${w}" height="${h}" fill="transparent" style="cursor:pointer"/><text x="${x + w / 2}" y="${y + h - 24}" text-anchor="middle" font-size="13" fill="#fff" opacity=".9" pointer-events="none">${m === 'card' ? 'Click here to add a photo' : 'Click here or use the button on the left to add a photo'}</text>` : '');
   let s = '';
   frames(n, x, y, w, h).forEach(([fx, fy, fw, fh], j) => {
     const k = fkey(m, j), photo = cal.photos[k];
     if (photo) {
       const b = photoBox(k, fx, fy, fw, fh);
-      s += `<clipPath id="pc${m}_${j}${uid}"><rect x="${fx}" y="${fy}" width="${fw}" height="${fh}"/></clipPath><image href="${photo}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="none" clip-path="url(#pc${m}_${j}${uid})"/>`;
+      s += `<clipPath id="pc${m}_${j}${uid}"><rect x="${fx}" y="${fy}" width="${fw}" height="${fh}"/></clipPath><image href="${esc(photo)}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="none" clip-path="url(#pc${m}_${j}${uid})"/>`;
       if (forScreen) s += `<rect class="photoHit" data-k="${k}" data-j="${j}" x="${fx}" y="${fy}" width="${fw}" height="${fh}" fill="transparent" style="cursor:move"/>`;
     } else {
       s += `<rect x="${fx}" y="${fy}" width="${fw}" height="${fh}" fill="${cal.color}" opacity=".16"/>`;
@@ -721,7 +732,12 @@ $('holidays').onchange = (e) => { cal.holidays = e.target.value; if (cal.holiday
 $('lunar').onchange = (e) => { cal.lunar = e.target.checked; renderAll(); save(); };
 $('startMonth').onchange = (e) => { const old = slot(cur).m; cal.start = Number(e.target.value); cur = slotOf(old); renderAll(); save(); };
 $('photoZoom').addEventListener('input', (e) => { const k = fkey(photoKey(), curFrame); cal.photoPos[k] = Object.assign({}, cal.photoPos[k], { z: Number(e.target.value) }); renderPage(); save(); });
-$('collage').onchange = (e) => { cal.collage[photoKey()] = Number(e.target.value); curFrame = 0; renderAll(); save(); };
+$('collage').onchange = (e) => {
+  const k = photoKey(), was = cal.collage[k], before = photoCount();
+  cal.collage[k] = Number(e.target.value);
+  if (k !== 'card' && photoCount() > Math.max(FREE_PHOTOS, before) && needsPro(`The free version holds ${FREE_PHOTOS} photos. Unlock Pro to give every month its own photos.`)) cal.collage[k] = was; // photos kept in hidden frames would come back
+  curFrame = 0; renderAll(); save();
+};
 // drag the photo inside its frame; click a frame to choose it; click an empty frame to add a photo
 let drag = null;
 $('page').addEventListener('pointerdown', (e) => {
@@ -763,7 +779,7 @@ $('prev').onclick = () => { if (cal.make === 'tags') { tagPage = (tagPage + tagP
 $('next').onclick = () => { if (cal.make === 'tags') { tagPage = (tagPage + 1) % tagPages(); renderAll(); return; } cur = (cur + 1) % 12; curFrame = 0; $('evMonth').value = ''; renderAll(); };
 $('photoBtn').onclick = () => {
   const k = fkey(photoKey(), curFrame);
-  if (!cal.photos[k] && cal.make !== 'card' && photoCount() >= FREE_PHOTOS && needsPro(`The free version holds ${FREE_PHOTOS} photos. Unlock Pro to give every month its own photos.`)) return;
+  if (cal.make !== 'card' && (cal.photos[k] ? photoCount() > FREE_PHOTOS : photoCount() >= FREE_PHOTOS) && needsPro(`The free version holds ${FREE_PHOTOS} photos. Unlock Pro to give every month its own photos.`)) return;
   pickFile('image/*', async (f) => { const r = await shrinkPhoto(f); cal.photos[k] = r.url; cal.photoPos[k] = { ar: r.ar }; renderAll(); save(); });
 };
 $('photoDel').onclick = () => { const k = fkey(photoKey(), curFrame); delete cal.photos[k]; delete cal.photoPos[k]; renderAll(); save(); };
