@@ -13,7 +13,14 @@ let proAvailable = false; // Pro limits apply only when the Store actually sells
 proAvailable = true; // owner's rule: Pro is never free – free limits apply everywhere (website, Store, offline) until Pro is bought
 let proSku = PRO_SKU;
 let isPro = false;
-try { isPro = localStorage.getItem('printcal-pro') === '1'; } catch (_) {}
+try { // website: never trust the cache (Pro is bought in the Store app); Store app: trust it only if the Store confirmed it in the last 30 days
+  if ('getDigitalGoodsService' in window && localStorage.getItem('printcal-pro') === '1') {
+    const ok = localStorage.getItem('printcal-pro-ok');
+    if (ok === null) localStorage.setItem('printcal-pro-ok', String(Date.now())); // saved by an older version: counts as confirmed now, once
+    const t = ok === null ? Date.now() : Number(ok);
+    isPro = t > 0 && t <= Date.now() + 864e5 && Date.now() - t < 30 * 864e5; // a future, NaN or garbage date is not trusted
+  }
+} catch (_) {}
 const unlocked = () => isPro || !proAvailable;
 
 async function billing() {
@@ -46,7 +53,10 @@ async function checkPro() {
     if (details[0]) { proSku = details[0].itemId; if (!PRO_IDS.includes(proSku)) PRO_IDS.push(proSku); }
     const list = await svc.listPurchases();
     const owned = list.some((p) => PRO_IDS.includes(p.itemId));
-    if (owned || details.length) { setPro(owned); return owned; }
+    if (owned || details.length) {
+      try { if (owned) localStorage.setItem('printcal-pro-ok', String(Date.now())); else localStorage.removeItem('printcal-pro-ok'); } catch (_) {}
+      setPro(owned); return owned;
+    }
     setPro(isPro); // Store did not answer (offline): keep what we knew
     return isPro;
   } catch (_) { return isPro; }
@@ -583,7 +593,19 @@ function allPages() {
 // ---------- UI ----------
 let toastTimer = 0;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 4000); }
-function renderPage() { $('page').innerHTML = currentPage(true).svg; if (cal.make !== 'tags') ensureAR(photoKey()); }
+function renderPage() {
+  const p = currentPage(true);
+  $('page').innerHTML = !unlocked() && !isCal() && theme().pro ? p.svg.replace(/<\/svg>$/, previewMark(p.w, p.h) + '</svg>') : p.svg; // free users see Pro designs marked as a preview
+  if (cal.make !== 'tags') ensureAR(photoKey());
+}
+// on-screen only: a "PREVIEW" watermark over cards and tags with a Pro design (never in print or saved files)
+function previewMark(W, H) {
+  const f1 = (n) => n.toFixed(1), fs = Math.min(W, H) * 0.16, a = Math.atan2(H, W) * -180 / Math.PI;
+  let s = `<g pointer-events="none" font-family="Segoe UI, Arial, sans-serif" font-weight="800" text-anchor="middle" transform="rotate(${f1(a)} ${f1(W / 2)} ${f1(H / 2)})">`;
+  s += `<text x="${f1(W / 2)}" y="${f1(H / 2 + fs * 0.35)}" font-size="${f1(fs)}" letter-spacing="${f1(fs * 0.12)}" fill="#fff" fill-opacity=".55" stroke="#1f1a17" stroke-opacity=".45" stroke-width="${f1(fs * 0.02)}">PREVIEW</text>`;
+  [-1, 1].forEach((k) => { s += `<text x="${f1(W / 2)}" y="${f1(H / 2 + k * fs * 1.25 + fs * 0.12)}" font-size="${f1(fs * 0.3)}" fill="#fff" fill-opacity=".6" stroke="#1f1a17" stroke-opacity=".35" stroke-width="${f1(fs * 0.008)}">★ PrintCal Pro</text>`; });
+  return s + '</g>';
+}
 function renderMonths() {
   const el = $('months');
   el.textContent = '';

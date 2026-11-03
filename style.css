@@ -118,3 +118,5 @@ textarea { min-height: 70px; resize: vertical; }
   #printArea { display: block; }
   #printArea svg { display: block; width: 100vw; height: 100vh; page-break-after: always; break-after: page; }
 }
+.fb-note { color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.45; margin: 10px 0 0; overflow-wrap: anywhere; }
+.fb-note a { color: inherit; text-decoration: underline; }
