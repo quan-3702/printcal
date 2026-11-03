@@ -10,7 +10,7 @@ const PRO_SKU = 'printcal_pro';
 const PRO_IDS = [PRO_SKU];
 let STORE_URL = 'https://apps.microsoft.com/detail/9MWSF3JMP1GJ';
 let proAvailable = false; // Pro limits apply only when the Store actually sells the add-on
-try { if ('getDigitalGoodsService' in window && localStorage.getItem('printcal-proavail') === '1') proAvailable = true; } catch (_) {} // keep Pro limits when offline
+proAvailable = true; // owner's rule: Pro is never free – free limits apply everywhere (website, Store, offline) until Pro is bought
 let proSku = PRO_SKU;
 let isPro = false;
 try { isPro = localStorage.getItem('printcal-pro') === '1'; } catch (_) {}
@@ -43,7 +43,6 @@ async function checkPro() {
   if (!svc) return false;
   try {
     const details = await svc.getDetails(PRO_IDS).catch(() => []);
-    if (details.length) { proAvailable = true; try { localStorage.setItem('printcal-proavail', '1'); } catch (_) {} }
     if (details[0]) { proSku = details[0].itemId; if (!PRO_IDS.includes(proSku)) PRO_IDS.push(proSku); }
     const list = await svc.listPurchases();
     const owned = list.some((p) => PRO_IDS.includes(p.itemId));
@@ -63,6 +62,7 @@ async function openPro(reason) {
     $('restoreBtn').hidden = false;
     try {
       const [d] = await svc.getDetails([proSku]);
+      if (!d) proMessage((reason ? reason + ' ' : '') + 'Pro is being added to the Microsoft Store and will be on sale very soon – please check again in a day or two.');
       const price = d && d.price ? new Intl.NumberFormat(undefined, { style: 'currency', currency: d.price.currency }).format(Number(d.price.value)) : '';
       $('buyBtn').textContent = price ? `Unlock Pro – ${price}` : 'Unlock Pro';
     } catch (_) { $('buyBtn').textContent = 'Unlock Pro'; }
@@ -111,7 +111,8 @@ let cur = 0; // month shown
 // a month page can hold 1–4 photos; the first is stored under the month number, the others as "month.frame"
 const fkey = (m, j) => (j ? `${m}.${j}` : String(m));
 const nFrames = (m) => Math.max(1, Math.min(4, cal.collage[m] || 1));
-const photoCount = () => { let n = 0; for (let m = 0; m < 12; m++) for (let j = 0; j < nFrames(m); j++) if (cal.photos[fkey(m, j)]) n++; return n; };
+const photosIn = (c) => { let n = 0; for (let m = 0; m < 12; m++) for (let j = 0; j < Math.max(1, Math.min(4, c.collage[m] || 1)); j++) if (c.photos[fkey(m, j)]) n++; return n; };
+const photoCount = () => photosIn(cal);
 let curFrame = 0;
 
 function idb() {
@@ -686,7 +687,7 @@ async function savePhotoPrint() { // one card as a 5 × 7 in JPEG at 300 dpi, re
   c.toBlob((b) => { download(b, `${cal.card.occ || 'holiday'}-card-5x7.jpg`); toast('Saved a 5 × 7 in photo (2100 × 1500 px). Upload it to Walmart, CVS, Walgreens or any photo shop and order 5 × 7 prints.'); }, 'image/jpeg', 0.95);
 }
 async function savePicture() {
-  if (!themeOk()) return;
+  if (!themeOk() || overPro()) return;
   const p = currentPage(false), img = new Image(), url = URL.createObjectURL(new Blob([p.svg], { type: 'image/svg+xml' }));
   await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
   const c = document.createElement('canvas'), k = 3;
@@ -708,7 +709,7 @@ function samplePhoto(m) { // a simple drawn landscape, so the sample works witho
 function loadSample() {
   cal = blank();
   [[0, 14, 'b', 'Grandpa Walter'], [1, 3, 'b', 'Emma'], [2, 21, 'a', 'John & Mary'], [4, 9, 'b', 'Mary'], [5, 18, 'b', 'Noah'], [6, 12, 'o', 'Family reunion'], [7, 2, 'b', 'Sophie'], [8, 27, 'b', 'David'], [9, 16, 'b', 'Grandma Rose'], [10, 8, 'b', 'Ava'], [11, 24, 'o', 'Dinner at our house']].forEach((e) => cal.events.push({ m: e[0], d: e[1], t: e[2], text: e[3] }));
-  for (let m = 0; m < 12; m++) { cal.photos[m] = samplePhoto(m); cal.photoPos[m] = { ar: 1200 / 760 }; }
+  for (let m = 0; m < (unlocked() ? 12 : FREE_PHOTOS); m++) { cal.photos[m] = samplePhoto(m); cal.photoPos[m] = { ar: 1200 / 760 }; } // the free sample stays within the free photo limit
   cur = 0;
 }
 function kinleafBirthdays(d) {
@@ -793,8 +794,10 @@ $('evAdd').onclick = () => {
   $('evDay').focus();
 };
 $('evText').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('evAdd').click(); });
-$('printOne').onclick = () => { if (!themeOk()) return; printPages([currentPage(false)]); };
-$('printAll').onclick = () => { if (!themeOk()) return; printPages(allPages()); };
+// a calendar with more photos or events than the free version holds (from an older version) can be viewed and backed up; printing or saving it needs Pro
+const overPro = () => isCal() && !unlocked() && (photoCount() > FREE_PHOTOS || cal.events.length > FREE_EVENTS) && needsPro(`This calendar has ${photoCount()} photos and ${cal.events.length} birthdays and events. The free version holds ${FREE_PHOTOS} photos and ${FREE_EVENTS} birthdays and events – you can view and back it up, and Pro prints and saves it.`);
+$('printOne').onclick = () => { if (!themeOk() || overPro()) return; printPages([currentPage(false)]); };
+$('printAll').onclick = () => { if (!themeOk() || overPro()) return; printPages(allPages()); };
 $('imgBtn').onclick = savePicture;
 $('photoPrintBtn').onclick = savePhotoPrint;
 // ---------- save the whole calendar as one PDF ----------
@@ -917,8 +920,11 @@ $('restoreFileBtn').onclick = () => pickFile('.json,application/json', async (f)
   try {
     const d = JSON.parse(await f.text());
     if (d.app !== 'printcal' || !d.cal || !Array.isArray(d.cal.events)) throw new Error('not a backup');
+    const nc = upgrade(d.cal), np = photosIn(nc), ne = nc.events.length;
+    if (!unlocked() && (np > FREE_PHOTOS || ne > FREE_EVENTS)) { openPro(`This backup holds ${np} photos and ${ne} birthdays and events. The free version holds ${FREE_PHOTOS} photos and ${FREE_EVENTS} birthdays and events – Pro opens all of it. The backup file is unchanged, so nothing is lost.`); return; }
     if (!confirm('Replace the calendar on screen with the one from this backup file?')) return;
-    cal = upgrade(d.cal); cur = 0; renderAll(); save(); toast('Backup opened');
+    if (!unlocked() && THEMES[nc.card.theme] && THEMES[nc.card.theme].pro) nc.card.theme = (OCCASIONS[nc.card.occ] || OCCASIONS.christmas).themes.find((k) => !THEMES[k].pro) || nc.card.theme; // a Pro card design from the backup switches to a free one
+    cal = nc; cur = 0; renderAll(); save(); toast('Backup opened');
   } catch (_) { toast('That file is not a PrintCal backup'); }
 });
 $('kinBtn').onclick = () => pickFile('.json,application/json', async (f) => {
