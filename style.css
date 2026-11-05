@@ -120,3 +120,6 @@ textarea { min-height: 70px; resize: vertical; }
 }
 .fb-note { color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.45; margin: 10px 0 0; overflow-wrap: anywhere; }
 .fb-note a { color: inherit; text-decoration: underline; }
+.addrow .ev-year { flex: 0 0 68px; width: 68px; }
+.events .evpic { flex: none; width: 30px; height: 30px; padding: 0; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; border-color: var(--line); }
+.events .evpic img { width: 100%; height: 100%; object-fit: cover; display: block; }
